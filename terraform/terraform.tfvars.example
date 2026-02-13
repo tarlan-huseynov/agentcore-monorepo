@@ -1,0 +1,7 @@
+# Copy this file to terraform.tfvars and customize:
+#
+# cp terraform.tfvars.example terraform.tfvars
+
+# region      = "us-east-1"
+# aws_profile = "your-profile-name"
+# bedrock_model_id = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
