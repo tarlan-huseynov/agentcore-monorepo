@@ -5,12 +5,11 @@ from __future__ import annotations
 from strands.models import BedrockModel
 from strands.models.model import CacheConfig
 
-from app.config import AWS_REGION, BEDROCK_MODEL_ID, get_aws_session
+from app.config import BEDROCK_MODEL_ID, get_aws_session
 
 
 def create_model(
     model_id: str = BEDROCK_MODEL_ID,
-    region: str = AWS_REGION,
 ) -> BedrockModel:
     """Create a BedrockModel with prompt caching enabled."""
     session = get_aws_session()

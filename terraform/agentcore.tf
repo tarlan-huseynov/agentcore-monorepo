@@ -35,9 +35,7 @@ resource "aws_bedrockagentcore_agent_runtime" "demo" {
   }
 
   environment_variables = {
-    ENVIRONMENT                      = "agentcore"
     LOG_LEVEL                        = var.log_level
-    AWS_REGION                       = local.region
     BEDROCK_MODEL_ID                 = var.bedrock_model_id
     MEMORY_ENABLED                   = "true"
     MEMORY_ID                        = aws_bedrockagentcore_memory.demo.id

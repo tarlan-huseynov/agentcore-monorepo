@@ -15,13 +15,6 @@ _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=_env_path)
 
 # ---------------------------------------------------------------------------
-# Environment
-# ---------------------------------------------------------------------------
-ENVIRONMENT: str = os.getenv("ENVIRONMENT", "local")
-AWS_REGION: str = os.getenv("AWS_REGION", "us-east-1")
-AWS_PROFILE: str | None = os.getenv("AWS_PROFILE")
-
-# ---------------------------------------------------------------------------
 # Bedrock model
 # ---------------------------------------------------------------------------
 BEDROCK_MODEL_ID: str = os.getenv(
@@ -44,12 +37,8 @@ MEMORY_SUMMARIZATION_STRATEGY_ID: str = os.getenv(
 
 
 def get_aws_session() -> boto3.Session:
-    """Return a boto3 Session for the current environment."""
-    if ENVIRONMENT == "local":
-        logger.info("AWS session: profile=%s region=%s", AWS_PROFILE, AWS_REGION)
-        return boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
-    logger.info("AWS session: IAM role (agentcore) region=%s", AWS_REGION)
-    return boto3.Session(region_name=AWS_REGION)
+    """Return a boto3 Session using standard SDK credential resolution."""
+    return boto3.Session()
 
 
 def get_memory_id() -> str | None:
