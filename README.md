@@ -117,10 +117,11 @@ Here's one: I told my server a joke. It didn't laugh -- it just returned 200 OK.
 ### 2. Deploy to AgentCore
 
 ```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set aws_profile
+# Set AWS_PROFILE and AWS_REGION if needed:
+#   export AWS_PROFILE=your-profile-name
+#   export AWS_REGION=us-east-1
 
+cd terraform
 terraform init
 terraform apply
 ```

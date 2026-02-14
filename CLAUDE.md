@@ -68,10 +68,11 @@ uv run ruff check app/ tests/
 ## Deployment
 
 ```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set aws_profile
+# Set AWS_PROFILE and AWS_REGION if needed:
+#   export AWS_PROFILE=your-profile-name
+#   export AWS_REGION=us-east-1
 
+cd terraform
 terraform init
 terraform apply    # builds + uploads + deploys in one command
 ```

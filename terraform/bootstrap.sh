@@ -12,6 +12,7 @@
 #
 # Usage:
 #   cd terraform
+#   export AWS_PROFILE=your-profile-name   # optional: select AWS CLI profile
 #   bash bootstrap.sh
 #
 # After running, uncomment the `backend "s3"` block in main.tf and run:
@@ -21,29 +22,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-project_name="agentcore-demo"
-region="us-east-1"
+read -rp "Project name [agentcore-demo]: " project_name
+project_name="${project_name:-agentcore-demo}"
+
+region="$(aws configure get region 2>/dev/null || echo "us-east-1")"
 s3_bucket_name="${project_name}-tfstate-${region}"
-
-# Read AWS profile from terraform.tfvars (if it exists)
-if [[ -f "${SCRIPT_DIR}/terraform.tfvars" ]]; then
-  profile="$(echo 'var.aws_profile' | terraform -chdir="${SCRIPT_DIR}" console -var-file terraform.tfvars 2>/dev/null | tr -d '"')"
-else
-  profile=""
-fi
-
-profile_flag=""
-if [[ -n "$profile" && "$profile" != "null" ]]; then
-  profile_flag="--profile ${profile}"
-  echo "Using AWS profile: ${profile}"
-else
-  echo "Using default AWS credentials"
-fi
 
 echo ""
 echo "=== Bootstrapping Terraform State ==="
-echo "  Bucket: ${s3_bucket_name}"
-echo "  Region: ${region}"
+echo "  Project: ${project_name}"
+echo "  Bucket:  ${s3_bucket_name}"
+echo "  Region:  ${region}"
 echo ""
 
 # Create S3 bucket
@@ -51,34 +40,29 @@ if [[ "$region" != "us-east-1" ]]; then
   aws s3api create-bucket \
     --bucket "${s3_bucket_name}" \
     --create-bucket-configuration LocationConstraint="${region}" \
-    --region "${region}" \
-    ${profile_flag}
+    --region "${region}"
 else
   aws s3api create-bucket \
     --bucket "${s3_bucket_name}" \
-    --region "${region}" \
-    ${profile_flag}
+    --region "${region}"
 fi
 
 # Enable versioning
 aws s3api put-bucket-versioning \
   --bucket "${s3_bucket_name}" \
-  --versioning-configuration Status=Enabled \
-  ${profile_flag}
+  --versioning-configuration Status=Enabled
 
 # Enable encryption
 aws s3api put-bucket-encryption \
   --bucket "${s3_bucket_name}" \
   --server-side-encryption-configuration \
-  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}' \
-  ${profile_flag}
+  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 
 # Block public access
 aws s3api put-public-access-block \
   --bucket "${s3_bucket_name}" \
   --public-access-block-configuration \
-  'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true' \
-  ${profile_flag}
+  'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
 
 echo ""
 echo "=== Done. Add this backend block to main.tf: ==="

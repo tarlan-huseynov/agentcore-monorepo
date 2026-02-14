@@ -4,18 +4,6 @@ variable "project_name" {
   default     = "agentcore-demo"
 }
 
-variable "region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "aws_profile" {
-  description = "AWS CLI profile (leave null for default/IAM role)"
-  type        = string
-  default     = null
-}
-
 variable "bedrock_model_id" {
   description = "Bedrock model ID for the agent"
   type        = string

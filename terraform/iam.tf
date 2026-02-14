@@ -22,7 +22,7 @@ data "aws_iam_policy_document" "assume_role" {
     condition {
       test     = "ArnLike"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:bedrock-agentcore:${var.region}:${local.account_id}:*"]
+      values   = ["arn:aws:bedrock-agentcore:${local.region}:${local.account_id}:*"]
     }
   }
 }
@@ -49,7 +49,7 @@ data "aws_iam_policy_document" "runtime_permissions" {
       "logs:PutRetentionPolicy",
     ]
     resources = [
-      "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
+      "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
     ]
   }
 
@@ -62,7 +62,7 @@ data "aws_iam_policy_document" "runtime_permissions" {
       "logs:PutLogEvents",
     ]
     resources = [
-      "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*",
+      "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*",
     ]
   }
 
