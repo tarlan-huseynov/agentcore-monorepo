@@ -1,30 +1,37 @@
 terraform {
   required_version = ">= 1.10"
 
-  # Uncomment after running: bash bootstrap.sh
-  # backend "s3" {
-  #   bucket       = "agentcore-demo-tfstate-us-east-1"
-  #   key          = "agentcore-demo/terraform.tfstate"
-  #   region       = "us-east-1"
-  #   encrypt      = true
-  #   use_lockfile = true  # S3-native locking, no DynamoDB needed
-  # }
+  backend "s3" {
+    bucket       = "agentcore-demo-tfstate-eu-central-1"
+    key          = "agentcore-demo/terraform.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true  # S3-native locking (Terraform >= 1.10)
+  }
 
   required_providers {
+    # AgentCore resources (aws_bedrockagentcore_*) require AWS provider >= 6.17.0
+    # Memory resources (aws_bedrockagentcore_memory*) require >= 6.18.0
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.80"
+      version = "~> 6.32"
     }
   }
 }
 
-provider "aws" {}
+provider "aws" {
+  default_tags {
+  tags = {
+    ManagedBy     = "terraform"
+  }
+}
+}
 
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
-  region     = data.aws_region.current.name
+  region     = data.aws_region.current.region
   name       = var.project_name
 }
