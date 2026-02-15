@@ -29,12 +29,13 @@ output "iam_role_arn" {
 }
 
 output "invoke_command" {
-  description = "AWS CLI command to invoke the deployed agent"
+  description = "AWS CLI command to invoke the deployed agent (requires AWS CLI >= 2.31.13)"
   value       = <<-EOT
-    aws bedrock-agentcore-runtime invoke-agent-runtime \
-      --agent-runtime-id ${aws_bedrockagentcore_agent_runtime.demo.agent_runtime_id} \
-      --runtime-endpoint-id DEFAULT \
+    aws bedrock-agentcore invoke-agent-runtime \
+      --agent-runtime-arn "${aws_bedrockagentcore_agent_runtime.demo.agent_runtime_arn}" \
+      --content-type "application/json" \
+      --accept "application/json" \
       --payload '{"prompt": "What is the weather in Tokyo?"}' \
-      --output text
+      response.json && cat response.json
   EOT
 }

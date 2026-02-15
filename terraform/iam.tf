@@ -103,8 +103,7 @@ data "aws_iam_policy_document" "runtime_permissions" {
     ]
     resources = [
       "arn:aws:bedrock:*::foundation-model/anthropic.claude-*",
-      "arn:aws:bedrock:*::foundation-model/us.anthropic.claude-*",
-      "arn:aws:bedrock:*:${local.account_id}:inference-profile/us.anthropic.claude-*",
+      "arn:aws:bedrock:*:${local.account_id}:inference-profile/${local.bedrock_region_prefix}.anthropic.claude-*",
     ]
   }
 

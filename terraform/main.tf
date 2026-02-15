@@ -34,4 +34,13 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
   region     = data.aws_region.current.region
   name       = var.project_name
+
+  # Bedrock cross-region inference profile prefix derived from deployment region
+  _region_prefix_map = {
+    "us" = "us"
+    "eu" = "eu"
+    "ap" = "apac"
+  }
+  bedrock_region_prefix = local._region_prefix_map[split("-", local.region)[0]]
+  bedrock_model_id      = "${local.bedrock_region_prefix}.${var.bedrock_model_id}"
 }

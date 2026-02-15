@@ -5,9 +5,9 @@ variable "project_name" {
 }
 
 variable "bedrock_model_id" {
-  description = "Bedrock model ID for the agent"
+  description = "Bedrock model ID for the agent (without regional prefix -- us/eu/apac is added automatically)"
   type        = string
-  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  default     = "anthropic.claude-sonnet-4-5-20250929-v1:0"
 }
 
 variable "python_runtime" {
