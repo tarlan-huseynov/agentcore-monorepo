@@ -6,7 +6,7 @@ terraform {
     key          = "agentcore-demo/terraform.tfstate"
     region       = "eu-central-1"
     encrypt      = true
-    use_lockfile = true  # S3-native locking (Terraform >= 1.10)
+    use_lockfile = true # S3-native locking (Terraform >= 1.10)
   }
 
   required_providers {
@@ -21,10 +21,10 @@ terraform {
 
 provider "aws" {
   default_tags {
-  tags = {
-    ManagedBy     = "terraform"
+    tags = {
+      ManagedBy = "terraform"
+    }
   }
-}
 }
 
 data "aws_caller_identity" "current" {}
