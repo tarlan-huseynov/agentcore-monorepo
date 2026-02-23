@@ -19,7 +19,7 @@ resource "aws_s3_bucket_public_access_block" "code" {
 }
 
 # ---------------------------------------------------------------------------
-# Build the deployment package when source changes
+# Build the agent deployment package when source changes
 # ---------------------------------------------------------------------------
 
 resource "null_resource" "build" {
@@ -40,7 +40,35 @@ resource "null_resource" "build" {
 }
 
 # ---------------------------------------------------------------------------
-# Upload the built ZIP to S3
+# Build MCP server packages when entry points change
+# ---------------------------------------------------------------------------
+
+resource "null_resource" "build_ccapi" {
+  triggers = {
+    source_hash    = filesha256("${path.module}/../mcp_servers/ccapi_entrypoint.py")
+    package_script = filesha256("${path.module}/../scripts/package_mcp.sh")
+  }
+
+  provisioner "local-exec" {
+    command     = "bash scripts/package_mcp.sh"
+    working_dir = "${path.module}/.."
+  }
+}
+
+resource "null_resource" "build_cost" {
+  triggers = {
+    source_hash    = filesha256("${path.module}/../mcp_servers/cost_entrypoint.py")
+    package_script = filesha256("${path.module}/../scripts/package_mcp.sh")
+  }
+
+  provisioner "local-exec" {
+    command     = "bash scripts/package_mcp.sh"
+    working_dir = "${path.module}/.."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Upload deployment ZIPs to S3
 # ---------------------------------------------------------------------------
 
 resource "aws_s3_object" "deployment_package" {
@@ -52,4 +80,24 @@ resource "aws_s3_object" "deployment_package" {
   etag = null_resource.build.id
 
   depends_on = [null_resource.build]
+}
+
+resource "aws_s3_object" "ccapi_package" {
+  bucket = aws_s3_bucket.code.id
+  key    = "${var.project_name}/mcp_ccapi_package.zip"
+  source = "${path.module}/../mcp_ccapi_package.zip"
+
+  etag = null_resource.build_ccapi.id
+
+  depends_on = [null_resource.build_ccapi]
+}
+
+resource "aws_s3_object" "cost_package" {
+  bucket = aws_s3_bucket.code.id
+  key    = "${var.project_name}/mcp_cost_package.zip"
+  source = "${path.module}/../mcp_cost_package.zip"
+
+  etag = null_resource.build_cost.id
+
+  depends_on = [null_resource.build_cost]
 }

@@ -1,94 +1,111 @@
 # Infrastructure Bootstrapper Agent
 
-An AI agent that creates, modifies, and manages real AWS infrastructure via CloudFormation from natural language — built with [Strands Agents SDK](https://strandsagents.com) and deployed to [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html).
+An AI agent that creates, modifies, and manages real AWS infrastructure from natural language — built with [Strands Agents SDK](https://strandsagents.com) and deployed to [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html). This reference implementation showcases the **AgentCore Gateway + MCP Server** pattern: the agent reaches 22 tools through a single Gateway endpoint backed by two purpose-built MCP servers.
 
-> *"I need a REST API with DynamoDB"* → agent generates a CF template → deploys it → monitors until complete → shows the endpoint.
-> *"Add a cache layer"* → retrieves existing template → modifies it → deploys via change set → shows diff.
+> *"Create a DynamoDB table for user sessions"* → agent calls CCAPI MCP → resource created → returns ARN.
+> *"What did we spend on Lambda last month?"* → agent calls Cost Explorer MCP → breakdown returned.
 
 ## Architecture
 
 ```
-User Query ("Create a DynamoDB table for user sessions")
+User Query
      |
      v
-[DemoOrchestrator]                  app/orchestrator.py
+[DemoOrchestrator]                          app/orchestrator.py
      |
      v
-[Strands Agent Loop]                strands.Agent (Claude on Bedrock)
-  |                    |
-  |  CF Management     |  Account Inspection
-  |  (app/cf_tools.py) |  (app/tools.py)
-  |                    |
-  |- list_stacks       |- describe_account
-  |- describe_stack    |- get_spending
-  |- get_template      |- search_logs
-  |- create_stack      |
-  |- create_change_set |
-  |- execute_change_set|
-  |- delete_stack      |
-  |- stack_events      |
-  |                    |
-CloudFormation       EC2/Lambda/S3/
-API                  Cost Explorer/
-                     CloudWatch
+[Strands Agent Loop]                        strands.Agent (Claude on Bedrock)
+     |                         |
+     |  Gateway MCP tools      |  Direct tool
+     |  (22 via Gateway)       |  (app/tools.py)
+     |                         |
+     v                         v
+[AgentCore Gateway]        search_logs
      |
-     v
-Answer + Tool Call Log
+     +---------------------------+
+     |                           |
+     v                           v
+[CCAPI MCP Server]      [Cost Explorer MCP Server]
+ 14 tools                7 tools
+ Cloud Control API       AWS Cost Explorer
+     |                           |
+     v                           v
+AWS Resources            Billing + Forecasts
+(1100+ resource types)
 ```
 
 **Infrastructure (Terraform-managed):**
 
 ```
 terraform/
-├── s3.tf          Build trigger → S3 bucket + ZIP upload
-├── iam.tf         Execution role (Bedrock, CloudFormation, resource creation, Memory)
-├── agentcore.tf   Agent Runtime (code, env vars, protocol)
-├── memory.tf      Memory resource + summarization strategy
-├── logging.tf     CloudWatch log group
-└── outputs.tf     Runtime ID, invoke command
+├── main.tf            Provider + data sources + locals
+├── variables.tf       Input variables
+├── s3.tf              Build triggers + S3 bucket + 3 ZIP uploads
+├── iam.tf             Agent Runtime role (Bedrock + Memory + ReadOnly)
+├── agentcore.tf       Agent Runtime (HTTP, 1 runtime)
+├── memory.tf          Memory resource + summarization strategy
+├── logging.tf         CloudWatch log group
+├── gateway.tf         AgentCore Gateway + 2 Gateway Targets
+├── mcp_runtimes.tf    CCAPI + Cost Explorer MCP Runtimes (MCP protocol)
+├── gateway_iam.tf     Gateway role + CCAPI MCP role + Cost MCP role
+└── outputs.tf         Runtime IDs, Gateway URL, invoke command
 ```
 
 ## Tools
 
-### Infrastructure Management — `app/cf_tools.py`
+### CCAPI MCP Server — `mcp_servers/ccapi_entrypoint.py` (14 tools)
+
+Backed by the [awslabs Cloud Control API MCP Server](https://github.com/awslabs/mcp/tree/main/src/ccapi-mcp-server). Provides CRUDL operations across 1100+ AWS resource types via the Cloud Control API.
+
+| Tool | Purpose |
+|------|---------|
+| `check_environment_variables` | Verify required env vars are set for the MCP server |
+| `get_aws_session_info` | Show current AWS credentials and session metadata |
+| `get_aws_account_info` | Account ID, partition, default region |
+| `get_resource_schema_information` | CloudFormation type schema for any resource type |
+| `list_resources` | List resources of a given type in a region |
+| `get_resource` | Get properties of a specific resource by identifier |
+| `create_resource` | Create a resource from a properties JSON document |
+| `update_resource` | Patch a resource using JSON Patch operations |
+| `delete_resource` | Delete a resource by identifier |
+| `get_resource_request_status` | Poll async CCAPI operation status |
+| `generate_infrastructure_code` | Generate CloudFormation or Terraform from existing resources |
+| `explain` | Explain any CloudFormation resource type in plain language |
+| `create_template` | Build a multi-resource CloudFormation template |
+| `run_checkov` | Run security/compliance scan on a CloudFormation template |
+
+### Cost Explorer MCP Server — `mcp_servers/cost_entrypoint.py` (7 tools)
+
+Backed by the [awslabs Cost Explorer MCP Server](https://github.com/awslabs/mcp/tree/main/src/cost-explorer-mcp-server). Read-only access to AWS billing data.
+
+| Tool | Purpose |
+|------|---------|
+| `get_today_date` | Return today's date (anchor for relative cost queries) |
+| `get_cost_and_usage` | Spending breakdown by service, tag, or linked account |
+| `get_cost_forecast` | Projected spend for a future date range |
+| `get_dimension_values` | Valid values for a Cost Explorer dimension (services, regions, etc.) |
+| `get_tag_values` | All values for a given cost allocation tag key |
+| `get_cost_and_usage_comparisons` | Side-by-side comparison across two time periods |
+| `get_cost_comparison_drivers` | Identify what drove a cost change between periods |
+
+### Direct Tool — `app/tools.py` (1 tool)
 
 | Tool | Purpose | Key Details |
 |------|---------|-------------|
-| `list_stacks` | Discover deployed stacks | Filter by agent-created tag or show all |
-| `describe_stack` | Full stack details | Status, parameters, outputs, resources, events |
-| `get_template` | Retrieve current CF template JSON | Use before modifying existing stacks |
-| `create_stack` | Deploy new infrastructure | Auto-validates, tags `ManagedBy=agentcore-bootstrapper`, `OnFailure=DELETE` |
-| `create_change_set` | Preview changes to existing stack | Polls until ready (3s interval, 60s max), shows diff |
-| `execute_change_set` | Apply a previewed change set | Only after review |
-| `delete_stack` | Tear down infrastructure | Safety guard: refuses stacks without agent tag |
-| `stack_events` | Monitor deployment progress | Diagnose failures, watch CREATE/UPDATE progress |
-
-**Safety guards:**
-- All stacks tagged `ManagedBy=agentcore-bootstrapper` + `CreatedAt=<ISO timestamp>`
-- `delete_stack` refuses to delete stacks without the agent tag
-- Templates validated before deployment; size checked against 51,200 byte limit
-- Change sets required for modifications (no direct updates)
-- IAM roles in templates must start with `agentcore-cf-` (permission boundary)
-- `CAPABILITY_IAM` + `CAPABILITY_NAMED_IAM` passed automatically
-
-### Account Inspection — `app/tools.py`
-
-| Tool | Purpose | Key Details |
-|------|---------|-------------|
-| `describe_account` | List resources in a region | EC2, Lambda, S3, RDS, DynamoDB, ECS, CloudWatch alarms |
-| `get_spending` | Cost breakdown by service | Cost Explorer, 1-90 days, daily or monthly granularity |
-| `search_logs` | Search CloudWatch Logs | Pass empty `log_group` to list available groups |
+| `search_logs` | Search CloudWatch Logs | Pass empty `log_group` to list available groups; can read the agent's own runtime logs |
 
 ## Prerequisites
 
-- **AWS account** with Bedrock model access enabled (Claude Sonnet 4.5)
+- **AWS account** with Bedrock model access enabled (Claude Sonnet 4.5 or later)
 - **[uv](https://docs.astral.sh/uv/)** — Python package manager
-- **Terraform** >= 1.5
-- **AWS CLI** configured with a profile or credentials
+- **Terraform** >= 1.5 with AWS provider >= 6.21 (required for `aws_bedrockagentcore_gateway` and MCP target resources)
+- **AWS CLI** >= 2.31.13 configured with a profile or credentials
 
 ## Quick Start
 
 ### 1. Local Development
+
+> **Note:** Local mode runs without the AgentCore Gateway. The Strands agent uses only the `search_logs` direct tool. The 21 MCP-backed tools are available only when deployed.
 
 ```bash
 git clone <repo-url>
@@ -104,37 +121,22 @@ uv run python cli.py
 ```
 
 ```
-demo> Create a DynamoDB table called users with id as partition key
+demo> What CloudWatch log groups are available?
 
 --- Answer ---
-I'll create a CloudFormation stack with a DynamoDB table for you.
-
-[Shows CF template JSON, deploys, returns stack ID]
-
-  Tools called: 1
-    create_stack({"region": "eu-central-1", "stack_name": "users-table"})
-  Duration: 4.2s | Stop: end_turn
-
-demo> Show me the stack events
-
---- Answer ---
-Stack Events for 'users-table' (latest 5):
-  [14:32:01] UsersTable (AWS::DynamoDB::Table): CREATE_COMPLETE
-  [14:31:45] UsersTable (AWS::DynamoDB::Table): CREATE_IN_PROGRESS
+Available log groups in eu-central-1:
+  /aws/bedrock-agentcore/runtimes/...
+  /aws/lambda/my-function
   ...
 
-demo> Add a TTL attribute to the users table
+  Tools called: 1
+    search_logs({"log_group": "", "region": "eu-central-1"})
+  Duration: 1.8s | Stop: end_turn
+
+demo> Search the agent's logs for errors in the last 30 minutes
 
 --- Answer ---
-I'll retrieve the current template and create a change set...
-
-[Shows proposed changes, waits for approval]
-
-demo> Delete the users stack
-
---- Answer ---
-Stack 'users-table' deletion initiated.
-Status: DELETE_IN_PROGRESS
+Found 3 entries matching "ERROR" ...
 ```
 
 ### 2. Deploy to AgentCore
@@ -150,11 +152,13 @@ terraform apply
 ```
 
 Terraform will:
-- Build the deployment ZIP (ARM64 cross-compiled)
-- Create an S3 bucket and upload the ZIP
-- Create the IAM execution role (Bedrock + CloudFormation + resource creation)
+- Build 3 deployment ZIPs (agent, CCAPI MCP server, Cost Explorer MCP server)
+- Create an S3 bucket and upload all 3 ZIPs
+- Create IAM roles for the agent runtime, Gateway, CCAPI MCP server, and Cost MCP server
+- Deploy 2 MCP server Runtimes (MCP protocol)
+- Create the AgentCore Gateway with 2 targets pointing at the MCP runtimes
 - Create the AgentCore Memory resource
-- Deploy the Agent Runtime
+- Deploy the Agent Runtime (HTTP protocol) with the Gateway URL injected as `GATEWAY_URL`
 
 ### 3. Test the Deployed Agent
 
@@ -164,68 +168,117 @@ Copy the `invoke_command` from Terraform outputs:
 terraform output -raw invoke_command | bash
 ```
 
+Or invoke directly:
+
+```bash
+aws bedrock-agentcore invoke-agent-runtime \
+  --agent-runtime-arn "<runtime-arn>" \
+  --content-type "application/json" \
+  --accept "application/json" \
+  --payload '{"prompt": "Create an S3 bucket called my-demo-bucket-12345"}' \
+  response.json && cat response.json
+```
+
 ## Project Structure
 
 ```
 agentcore-demo/
-├── app/                         Python application
-│   ├── entrypoint.py            AgentCore Runtime entry point (deferred imports)
-│   ├── config.py                Dual-mode config (local/AgentCore)
-│   ├── orchestrator.py          Strands agent wrapper + memory integration
-│   ├── cf_tools.py              CloudFormation tools (8): create, modify, delete, monitor
-│   ├── tools.py                 Account inspection tools (3): resources, costs, logs
-│   └── bedrock.py               BedrockModel factory with prompt caching
-├── cli.py                       Interactive REPL for local development
-├── scripts/package.sh           ARM64 deployment packaging
-├── terraform/                   Infrastructure as code
-│   ├── main.tf                  Provider + data sources
-│   ├── variables.tf             Input variables
-│   ├── s3.tf                    Build + upload
-│   ├── iam.tf                   Execution role + policies
-│   ├── agentcore.tf             Agent Runtime resource
-│   ├── memory.tf                Memory + summarization
-│   ├── logging.tf               CloudWatch log group
-│   └── outputs.tf               Useful outputs
-├── pyproject.toml               Dependencies (uv)
+├── app/                            Python application (agent runtime)
+│   ├── entrypoint.py               AgentCore Runtime entry point (deferred imports)
+│   ├── config.py                   Dual-mode config (local/AgentCore)
+│   ├── orchestrator.py             Strands agent wrapper + Gateway MCP + memory
+│   ├── tools.py                    Direct tool: search_logs
+│   └── bedrock.py                  BedrockModel factory with prompt caching
+├── mcp_servers/                    MCP server entry points
+│   ├── ccapi_entrypoint.py         CCAPI MCP server (streamable-http)
+│   └── cost_entrypoint.py          Cost Explorer MCP server (streamable-http)
+├── cli.py                          Interactive REPL for local development
+├── scripts/
+│   ├── package.sh                  ARM64 packaging for the agent runtime
+│   └── package_mcp.sh              ARM64 packaging for both MCP servers
+├── terraform/                      Infrastructure as code
+│   ├── main.tf                     Provider + data sources + locals
+│   ├── variables.tf                Input variables
+│   ├── s3.tf                       Build triggers + S3 uploads (3 packages)
+│   ├── iam.tf                      Agent Runtime IAM role
+│   ├── agentcore.tf                Agent Runtime resource (HTTP)
+│   ├── memory.tf                   Memory + summarization strategy
+│   ├── logging.tf                  CloudWatch log group
+│   ├── gateway.tf                  Gateway + 2 Gateway Targets
+│   ├── mcp_runtimes.tf             CCAPI + Cost Explorer Runtimes (MCP)
+│   ├── gateway_iam.tf              Gateway + MCP server IAM roles
+│   └── outputs.tf                  Runtime IDs, Gateway URL, invoke command
+├── pyproject.toml                  Dependencies (uv)
 └── README.md
 ```
 
 ## How Code Redeployment Works
 
-When you change a Python file and run `terraform apply`:
+There are three independently tracked packages. When you change source files and run `terraform apply`:
 
-1. `null_resource.build` detects the source hash changed → re-runs `package.sh`
-2. `aws_s3_object` detects new build → re-uploads ZIP to S3
-3. `aws_bedrockagentcore_agent_runtime` detects `_CODE_VERSION` env var changed → updates runtime
-4. AgentCore re-fetches code from S3 and restarts
+**Agent runtime** (`app/` changes):
+1. `null_resource.build` detects source hash changed → re-runs `scripts/package.sh`
+2. `aws_s3_object.deployment_package` detects new build → re-uploads `deployment_package.zip`
+3. `aws_bedrockagentcore_agent_runtime.demo` detects `_CODE_VERSION` changed → updates runtime
 
-The `_CODE_VERSION` env var trick is necessary because AgentCore caches S3 code
-at deploy time. Simply updating the S3 object won't trigger a redeploy.
+**CCAPI MCP server** (`mcp_servers/ccapi_entrypoint.py` changes):
+1. `null_resource.build_ccapi` detects change → re-runs `scripts/package_mcp.sh`
+2. `aws_s3_object.ccapi_package` re-uploads `mcp_ccapi_package.zip`
+3. `aws_bedrockagentcore_agent_runtime.ccapi` picks up `_CODE_VERSION` change → redeploys
+
+**Cost Explorer MCP server** (`mcp_servers/cost_entrypoint.py` changes):
+1. Same pattern via `null_resource.build_cost` → `mcp_cost_package.zip` → `cost_explorer` runtime
+
+The `_CODE_VERSION` env var trick is necessary because AgentCore caches S3 code at deploy time. Simply updating the S3 object won't trigger a redeploy — changing an env var forces the runtime to re-fetch code from S3.
 
 ## IAM Permissions
 
-The agent's IAM role includes:
+Four IAM roles are created. Each role is scoped to its exact function.
+
+### Agent Runtime Role (`iam.tf`)
 
 | Category | Scope | Purpose |
 |----------|-------|---------|
-| ReadOnlyAccess | AWS managed policy | All Describe/List/Get for inspection tools |
-| CloudFormation | `*` | Stack CRUD, change sets, validation, tagging |
-| IAM | `agentcore-cf-*` roles only | Create/manage roles for CF-created resources |
-| Resource creation | `*` | DynamoDB, Lambda, API Gateway, S3, SQS, SNS, CloudWatch, EC2 security groups, Step Functions, EventBridge |
-| Bedrock | Claude models | LLM inference |
-| AgentCore Memory | Memory resource | Session persistence |
-| CloudWatch Logs | AgentCore log groups | Runtime logging |
+| ReadOnlyAccess | AWS managed policy | All Describe/List/Get for `search_logs` |
+| Bedrock invoke | Claude models | LLM inference |
+| AgentCore Memory | Memory resource | Session persistence (CreateEvent, ListEvents, etc.) |
+| S3 GetObject | Code bucket | Fetch deployment artifact |
+| CloudWatch Logs write | AgentCore log groups | Runtime logging |
+
+### Gateway Role (`gateway_iam.tf`)
+
+| Category | Scope | Purpose |
+|----------|-------|---------|
+| InvokeAgentRuntime | CCAPI + Cost MCP Runtime ARNs | Route tool calls from Gateway to MCP servers |
+| CloudWatch Logs write | AgentCore gateway log groups | Gateway logging |
+
+### CCAPI MCP Server Role (`gateway_iam.tf`)
+
+| Category | Scope | Purpose |
+|----------|-------|---------|
+| Cloud Control API | `*` | CRUDL across all resource types |
+| CloudFormation schema/IaC | `*` | Schema lookup, template generation |
+| Service permissions | `*` | DynamoDB, Lambda, API Gateway, S3, SQS, SNS, CloudWatch, EC2, Step Functions, EventBridge |
+| IAM | `agentcore-cf-*` roles only | Create/manage roles for agent-created resources |
+| CloudWatch Logs write | AgentCore log groups | Runtime logging |
+
+### Cost Explorer MCP Server Role (`gateway_iam.tf`)
+
+| Category | Scope | Purpose |
+|----------|-------|---------|
+| Cost Explorer | `ce:GetCostAndUsage`, `ce:GetCostForecast`, etc. | Read-only billing queries |
+| CloudWatch Logs write | AgentCore log groups | Runtime logging |
 
 ## Design Principles
 
-- **Strands Agent as orchestrator** — agentic loop handled entirely by the SDK
-- **Pure helpers + @tool wrappers** — business logic separated from framework plumbing for testability
-- **CloudFormation as source of truth** — no S3 template storage; `get_template()` + `list_stacks()` retrieve state
-- **Change sets for modifications** — always preview before applying
-- **Agent tag safety** — only delete what the agent created
-- **Deferred imports** — heavy deps imported at first invocation (30s AgentCore init timeout)
+- **Gateway as tool aggregator** — the agent connects to one MCP endpoint and discovers all 21 Gateway-backed tools; no per-service wiring in the orchestrator
+- **MCP as the integration protocol** — both MCP server runtimes speak streamable-http MCP; the Gateway handles auth, routing, and tool namespacing
+- **Hybrid tool pattern** — MCP tools for infrastructure work, a direct `@tool` function for log search; mix as appropriate for each use case
+- **Purpose-built MCP servers** — CCAPI and Cost Explorer servers run as isolated runtimes with minimal, scoped IAM roles; blast radius is contained
+- **Strands Agent as orchestrator** — the agentic loop is handled entirely by the SDK, including MCP client management
+- **Deferred imports** — heavy deps imported at first invocation to stay within the AgentCore 30s init timeout
 - **Memory graceful degradation** — agent works without memory if init fails
-- **Stateless per query** — fresh agent instance, no carryover
+- **Stateless per query** — fresh agent instance per invocation, no state carryover
 
 ## Clean Up
 
@@ -234,6 +287,6 @@ cd terraform
 terraform destroy
 ```
 
-This removes all Terraform-managed resources including the S3 bucket (`force_destroy = true`).
+This removes all Terraform-managed resources: 3 Runtimes, 1 Gateway, 2 Gateway Targets, Memory, IAM roles, and the S3 bucket (`force_destroy = true`).
 
-**Note:** CloudFormation stacks created by the agent are *not* managed by Terraform. Delete them separately using the agent (`delete_stack`) or the AWS Console.
+**Note:** Resources created by the agent via CCAPI (DynamoDB tables, Lambda functions, S3 buckets, etc.) are *not* managed by Terraform. Delete them separately using the agent or the AWS Console before running `terraform destroy`.

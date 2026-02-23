@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from app.config import GATEWAY_URL  # noqa: E402
 from app.orchestrator import DemoOrchestrator  # noqa: E402
 
 _IS_TTY = sys.stdout.isatty()
@@ -98,7 +99,11 @@ def main() -> int:
     print(bold("=" * 50))
     print(bold("  AgentCore Demo CLI"))
     print(bold("=" * 50))
-    print(dim("  Tools: CloudFormation (8) + AWS inspection (3)"))
+    if GATEWAY_URL:
+        print(dim("  Tools: Gateway MCP (21) + direct (1)"))
+    else:
+        print(dim("  Tools: search_logs only (no GATEWAY_URL)"))
+        print(dim("  Set GATEWAY_URL for MCP tools"))
     print(dim("  Type :quit to exit"))
     print(bold("=" * 50))
     print()

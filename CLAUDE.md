@@ -3,10 +3,11 @@
 ## What This Is
 
 An **Infrastructure Bootstrapper Agent** on Amazon Bedrock AgentCore that creates,
-modifies, and manages real AWS infrastructure via CloudFormation from natural language:
+modifies, and manages real AWS infrastructure from natural language:
 - **Strands Agents SDK** as the orchestrator (agentic loop)
 - **Amazon Bedrock** for LLM inference (Claude models)
-- **CloudFormation** for infrastructure creation and management
+- **AgentCore Gateway + MCP Servers** for infrastructure and cost tooling
+- **Cloud Control API** (1100+ resource types) via CCAPI MCP Server
 - **AgentCore Memory** for multi-turn session persistence
 - **Terraform** for single-command deployment
 
@@ -21,27 +22,21 @@ modifies, and manages real AWS infrastructure via CloudFormation from natural la
 ```
 User Query ("I need a REST API with DynamoDB")
      |
-[DemoOrchestrator]                  app/orchestrator.py
-     |
-[Strands Agent Loop]                strands.Agent (Bedrock-powered)
+[Agent Runtime]                  app/orchestrator.py (Strands Agent)
   |                    |
-  |  CF Management     |  Account Inspection
-  |  (app/cf_tools.py) |  (app/tools.py)
+  | MCPClient          | Direct @tool
+  | (Gateway)          | (Strands)
   |                    |
-  |- list_stacks       |- describe_account
-  |- describe_stack    |- get_spending
-  |- get_template      |- search_logs
-  |- create_stack      |
-  |- create_change_set |
-  |- execute_change_set|
-  |- delete_stack      |
-  |- stack_events      |
-  |                    |
-CloudFormation       EC2/Lambda/S3/
-API                  Cost Explorer/
-                     CloudWatch
-     |
-Answer + Tool Call Log
+  v                    v
+[AgentCore Gateway]    search_logs (CloudWatch Logs)
+  |              |
+  v              v
+[CCAPI MCP]    [Cost Explorer MCP]
+(Runtime 2)    (Runtime 3)
+  |              |
+  v              v
+Cloud Control   Cost Explorer
+API (1100+)     API
 ```
 
 For detailed architecture, see `@.claude/prompts/architecture.md`.
@@ -50,14 +45,20 @@ For detailed architecture, see `@.claude/prompts/architecture.md`.
 
 - `app/` - Python application
   - `orchestrator.py` - Strands agent wrapper + memory integration
-  - `cf_tools.py` - CloudFormation tools (8) with pure helpers + `@tool` wrappers
-  - `tools.py` - AWS inspection tools (3) with pure helpers + `@tool` wrappers
+  - `tools.py` - CloudWatch Logs search (1 direct tool) with pure helper + `@tool` wrapper
   - `bedrock.py` - BedrockModel factory with prompt caching
   - `config.py` - Dual-mode config (local/AgentCore)
   - `entrypoint.py` - AgentCore Runtime entry point (deferred imports)
+- `mcp_servers/` - MCP server entry points
+  - `ccapi_entrypoint.py` - CCAPI MCP Server (Cloud Control API, 14 tools)
+  - `cost_entrypoint.py` - Cost Explorer MCP Server (7 tools)
 - `cli.py` - Interactive REPL for local development
 - `scripts/package.sh` - ARM64 deployment packaging
-- `terraform/` - Infrastructure as code (S3, IAM, Runtime, Memory, Logging)
+- `terraform/` - Infrastructure as code
+  - `gateway.tf` - AgentCore Gateway
+  - `mcp_runtimes.tf` - MCP Server Runtimes (CCAPI + Cost Explorer)
+  - `gateway_iam.tf` - Gateway + MCP IAM roles
+  - (plus S3, IAM, main Runtime, Memory, Logging)
 
 ## Key Constraints
 
@@ -98,6 +99,7 @@ terraform apply    # builds + uploads + deploys in one command
 
 @.claude/prompts/system.md
 @.claude/prompts/architecture.md
+@.claude/rules/agents-and-skills.md
 
 ## Gotchas
 
@@ -107,9 +109,10 @@ terraform apply    # builds + uploads + deploys in one command
 - AgentCore Memory sessionId/actorId must match `[a-zA-Z0-9][a-zA-Z0-9-_]*` -- use `_sanitize_memory_id()`
 - Bedrock Converse API: every `toolResult` must have matching `toolUse` -- memory can break this
 - `_CODE_VERSION` env var trick needed to force AgentCore redeploy on S3 code changes
-- CF template body max 51,200 bytes -- use S3 for larger templates
-- IAM roles in CF templates must start with `agentcore-cf-` (permission boundary)
-- All agent-created stacks tagged `ManagedBy=agentcore-bootstrapper` -- delete_stack refuses untagged stacks
+- CCAPI MCP server object: `from awslabs.ccapi_mcp_server.server import mcp`
+- Cost Explorer MCP server object: `from awslabs.cost_explorer_mcp_server.server import app`
+- `GATEWAY_URL` env var must be set for MCP tools to work (injected by Terraform)
+- `mcp` package is already a transitive dep of `strands-agents` -- no separate install needed
 
 ## References
 

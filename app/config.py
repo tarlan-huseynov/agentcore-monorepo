@@ -35,6 +35,11 @@ MEMORY_SUMMARIZATION_STRATEGY_ID: str = os.getenv(
     "MEMORY_SUMMARIZATION_STRATEGY_ID", ""
 )
 
+# ---------------------------------------------------------------------------
+# AgentCore Gateway (MCP tools endpoint)
+# ---------------------------------------------------------------------------
+GATEWAY_URL: str = os.getenv("GATEWAY_URL", "")
+
 
 def get_aws_session() -> boto3.Session:
     """Return a boto3 Session using standard SDK credential resolution."""

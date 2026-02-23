@@ -5,7 +5,7 @@ Local usage:
 
     curl -X POST http://localhost:8080/invocations \
       -H "Content-Type: application/json" \
-      -d '{"prompt": "Create a DynamoDB table for user sessions"}'
+      -d '{"prompt": "List my S3 buckets"}'
 """
 
 from __future__ import annotations

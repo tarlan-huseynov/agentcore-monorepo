@@ -7,7 +7,7 @@
 
 resource "aws_bedrockagentcore_agent_runtime" "demo" {
   agent_runtime_name = replace(var.project_name, "-", "_")
-  description        = "Infrastructure Bootstrapper: Strands Agent + CloudFormation + Bedrock + Memory"
+  description        = "Infrastructure Bootstrapper: Strands Agent + Gateway MCP + Bedrock + Memory"
   role_arn           = aws_iam_role.runtime.arn
 
   agent_runtime_artifact {
@@ -38,6 +38,7 @@ resource "aws_bedrockagentcore_agent_runtime" "demo" {
     MEMORY_ENABLED                   = "true"
     MEMORY_ID                        = aws_bedrockagentcore_memory.demo.id
     MEMORY_SUMMARIZATION_STRATEGY_ID = aws_bedrockagentcore_memory_strategy.summarization.memory_strategy_id
+    GATEWAY_URL                      = aws_bedrockagentcore_gateway.main.gateway_url
 
     # Force runtime update when code changes.  AgentCore caches S3 code at
     # deploy time -- simply updating the S3 object won't trigger a redeploy.

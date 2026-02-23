@@ -1,11 +1,31 @@
 output "runtime_id" {
-  description = "AgentCore Runtime ID"
+  description = "Agent Runtime ID"
   value       = aws_bedrockagentcore_agent_runtime.demo.agent_runtime_id
 }
 
 output "runtime_arn" {
-  description = "AgentCore Runtime ARN"
+  description = "Agent Runtime ARN"
   value       = aws_bedrockagentcore_agent_runtime.demo.agent_runtime_arn
+}
+
+output "gateway_id" {
+  description = "AgentCore Gateway ID"
+  value       = aws_bedrockagentcore_gateway.main.gateway_id
+}
+
+output "gateway_url" {
+  description = "AgentCore Gateway MCP endpoint URL"
+  value       = aws_bedrockagentcore_gateway.main.gateway_url
+}
+
+output "ccapi_runtime_id" {
+  description = "CCAPI MCP Server Runtime ID"
+  value       = aws_bedrockagentcore_agent_runtime.ccapi.agent_runtime_id
+}
+
+output "cost_runtime_id" {
+  description = "Cost Explorer MCP Server Runtime ID"
+  value       = aws_bedrockagentcore_agent_runtime.cost_explorer.agent_runtime_id
 }
 
 output "s3_bucket" {
@@ -24,7 +44,7 @@ output "summarization_strategy_id" {
 }
 
 output "iam_role_arn" {
-  description = "IAM execution role ARN"
+  description = "Agent IAM execution role ARN"
   value       = aws_iam_role.runtime.arn
 }
 
@@ -35,7 +55,7 @@ output "invoke_command" {
       --agent-runtime-arn "${aws_bedrockagentcore_agent_runtime.demo.agent_runtime_arn}" \
       --content-type "application/json" \
       --accept "application/json" \
-      --payload '{"prompt": "What is the weather in Tokyo?"}' \
+      --payload '{"prompt": "List my S3 buckets"}' \
       response.json && cat response.json
   EOT
 }
