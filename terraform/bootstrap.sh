@@ -22,8 +22,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-read -rp "Project name [agentcore-demo]: " project_name
-project_name="${project_name:-agentcore-demo}"
+read -rp "Project name [agentcore-bootstrapper]: " project_name
+project_name="${project_name:-agentcore-bootstrapper}"
 
 region="$(aws configure get region 2>/dev/null || echo "us-east-1")"
 s3_bucket_name="${project_name}-tfstate-${region}"

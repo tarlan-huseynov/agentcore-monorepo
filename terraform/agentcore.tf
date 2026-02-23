@@ -5,7 +5,7 @@
 # field, run `terraform apply`, and only that field changes.
 # ---------------------------------------------------------------------------
 
-resource "aws_bedrockagentcore_agent_runtime" "demo" {
+resource "aws_bedrockagentcore_agent_runtime" "main" {
   agent_runtime_name = replace(var.project_name, "-", "_")
   description        = "Infrastructure Bootstrapper: Strands Agent + Gateway MCP + Bedrock + Memory"
   role_arn           = aws_iam_role.runtime.arn
@@ -36,7 +36,7 @@ resource "aws_bedrockagentcore_agent_runtime" "demo" {
     LOG_LEVEL                        = var.log_level
     BEDROCK_MODEL_ID                 = local.bedrock_model_id
     MEMORY_ENABLED                   = "true"
-    MEMORY_ID                        = aws_bedrockagentcore_memory.demo.id
+    MEMORY_ID                        = aws_bedrockagentcore_memory.main.id
     MEMORY_SUMMARIZATION_STRATEGY_ID = aws_bedrockagentcore_memory_strategy.summarization.memory_strategy_id
     GATEWAY_URL                      = aws_bedrockagentcore_gateway.main.gateway_url
 

@@ -1,11 +1,11 @@
 output "runtime_id" {
   description = "Agent Runtime ID"
-  value       = aws_bedrockagentcore_agent_runtime.demo.agent_runtime_id
+  value       = aws_bedrockagentcore_agent_runtime.main.agent_runtime_id
 }
 
 output "runtime_arn" {
   description = "Agent Runtime ARN"
-  value       = aws_bedrockagentcore_agent_runtime.demo.agent_runtime_arn
+  value       = aws_bedrockagentcore_agent_runtime.main.agent_runtime_arn
 }
 
 output "gateway_id" {
@@ -35,7 +35,7 @@ output "s3_bucket" {
 
 output "memory_id" {
   description = "AgentCore Memory resource ID"
-  value       = aws_bedrockagentcore_memory.demo.id
+  value       = aws_bedrockagentcore_memory.main.id
 }
 
 output "summarization_strategy_id" {
@@ -52,7 +52,7 @@ output "invoke_command" {
   description = "AWS CLI command to invoke the deployed agent (requires AWS CLI >= 2.31.13)"
   value       = <<-EOT
     aws bedrock-agentcore invoke-agent-runtime \
-      --agent-runtime-arn "${aws_bedrockagentcore_agent_runtime.demo.agent_runtime_arn}" \
+      --agent-runtime-arn "${aws_bedrockagentcore_agent_runtime.main.agent_runtime_arn}" \
       --content-type "application/json" \
       --accept "application/json" \
       --payload '{"prompt": "List my S3 buckets"}' \

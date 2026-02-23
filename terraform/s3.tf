@@ -4,7 +4,7 @@
 
 resource "aws_s3_bucket" "code" {
   bucket_prefix = "${var.project_name}-code-"
-  force_destroy = true # Demo: allow terraform destroy to clean up
+  force_destroy = true # Allow terraform destroy to clean up
 
   tags = { Project = var.project_name }
 }

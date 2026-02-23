@@ -263,7 +263,7 @@ def main() -> int:
         "--log-group",
         default=os.getenv(
             "AGENTCORE_LOG_GROUP",
-            "/aws/bedrock-agentcore/runtimes/agentcore-demo-app-logs",
+            "/aws/bedrock-agentcore/runtimes/agentcore-bootstrapper-app-logs",
         ),
         help="CloudWatch log group name",
     )

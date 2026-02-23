@@ -12,8 +12,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 POLICY_FILE="$PROJECT_ROOT/terraform/policies/safety.cedar"
-ENGINE_NAME="${ENGINE_NAME:-agentcore_demo_policy_engine}"
-POLICY_NAME="${POLICY_NAME:-agentcore_demo_safety_policy}"
+ENGINE_NAME="${ENGINE_NAME:-agentcore_bootstrapper_policy_engine}"
+POLICY_NAME="${POLICY_NAME:-agentcore_bootstrapper_safety_policy}"
 
 echo "=== AgentCore Policy Setup ==="
 echo "  Gateway ID:  $GATEWAY_ID"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Package demo app for AgentCore Runtime deployment.
+# Package app for AgentCore Runtime deployment.
 #
 # Creates a ZIP with ARM64-compiled dependencies + application code
 # suitable for uploading to AgentCore's S3 code bucket.
@@ -18,7 +18,7 @@ PYTHON_VERSION="${1:-3.12}"
 BUILD_DIR="$PROJECT_ROOT/deployment_package"
 ZIP_FILE="$PROJECT_ROOT/deployment_package.zip"
 
-echo "=== AgentCore Demo Packaging ==="
+echo "=== AgentCore Bootstrapper Packaging ==="
 echo "  Python: $PYTHON_VERSION"
 echo ""
 

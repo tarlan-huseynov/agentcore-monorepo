@@ -1,7 +1,7 @@
 [project]
-name = "agentcore-demo"
+name = "agentcore-bootstrapper"
 version = "0.1.0"
-description = "Demo: Strands Agents on Amazon Bedrock AgentCore with Terraform"
+description = "Infrastructure Bootstrapper Agent on Amazon Bedrock AgentCore with Terraform"
 requires-python = ">=3.12"
 dependencies = [
     "strands-agents>=1.0.0",

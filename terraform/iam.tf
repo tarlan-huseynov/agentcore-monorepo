@@ -126,8 +126,8 @@ data "aws_iam_policy_document" "runtime_write_permissions" {
       "bedrock-agentcore:RetrieveMemoryRecords",
     ]
     resources = [
-      aws_bedrockagentcore_memory.demo.arn,
-      "${aws_bedrockagentcore_memory.demo.arn}/*",
+      aws_bedrockagentcore_memory.main.arn,
+      "${aws_bedrockagentcore_memory.main.arn}/*",
     ]
   }
 }

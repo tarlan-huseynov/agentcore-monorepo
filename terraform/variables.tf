@@ -1,7 +1,7 @@
 variable "project_name" {
   description = "Name prefix for all resources"
   type        = string
-  default     = "agentcore-demo"
+  default     = "agentcore-bootstrapper"
 }
 
 variable "bedrock_model_id" {
