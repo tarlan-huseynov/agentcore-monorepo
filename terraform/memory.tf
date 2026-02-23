@@ -4,7 +4,7 @@
 
 resource "aws_bedrockagentcore_memory" "demo" {
   name                  = replace("${local.name}-memory", "-", "_")
-  description           = "Session memory for the AgentCore demo agent"
+  description           = "Session memory for the Infrastructure Bootstrapper agent"
   event_expiry_duration = var.memory_event_expiry_days
 
   tags = { Project = var.project_name }
@@ -15,6 +15,6 @@ resource "aws_bedrockagentcore_memory_strategy" "summarization" {
   memory_id = aws_bedrockagentcore_memory.demo.id
   type      = "SUMMARIZATION"
 
-  description = "Summarize demo sessions into long-term memory"
+  description = "Summarize infrastructure sessions into long-term memory"
   namespaces  = ["strategies/{memoryStrategyId}/actors/{actorId}/sessions/{sessionId}"]
 }

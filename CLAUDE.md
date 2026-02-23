@@ -2,28 +2,44 @@
 
 ## What This Is
 
-A **minimal demo application** showcasing Strands Agents on Amazon Bedrock AgentCore:
+An **Infrastructure Bootstrapper Agent** on Amazon Bedrock AgentCore that creates,
+modifies, and manages real AWS infrastructure via CloudFormation from natural language:
 - **Strands Agents SDK** as the orchestrator (agentic loop)
 - **Amazon Bedrock** for LLM inference (Claude models)
+- **CloudFormation** for infrastructure creation and management
 - **AgentCore Memory** for multi-turn session persistence
 - **Terraform** for single-command deployment
 
 ## What This Is NOT
 
-- Not a production agent -- uses hardcoded data, no external APIs
-- Not a security-critical system -- no access control enforcement needed
+- Not a production infrastructure tool -- demo/reference implementation
+- Not a security-critical system -- scoped IAM permissions, agent-tag safety guards
 - Designed as a **reference implementation** for AgentCore deployment patterns
 
 ## Architecture
 
 ```
-User Query
+User Query ("I need a REST API with DynamoDB")
      |
-[DemoOrchestrator]        app/orchestrator.py
+[DemoOrchestrator]                  app/orchestrator.py
      |
-[Strands Agent Loop]      strands.Agent (Bedrock-powered)
-  |        |        |
-get_weather get_time tell_joke   app/tools.py
+[Strands Agent Loop]                strands.Agent (Bedrock-powered)
+  |                    |
+  |  CF Management     |  Account Inspection
+  |  (app/cf_tools.py) |  (app/tools.py)
+  |                    |
+  |- list_stacks       |- describe_account
+  |- describe_stack    |- get_spending
+  |- get_template      |- search_logs
+  |- create_stack      |
+  |- create_change_set |
+  |- execute_change_set|
+  |- delete_stack      |
+  |- stack_events      |
+  |                    |
+CloudFormation       EC2/Lambda/S3/
+API                  Cost Explorer/
+                     CloudWatch
      |
 Answer + Tool Call Log
 ```
@@ -34,7 +50,8 @@ For detailed architecture, see `@.claude/prompts/architecture.md`.
 
 - `app/` - Python application
   - `orchestrator.py` - Strands agent wrapper + memory integration
-  - `tools.py` - Three demo tools with pure helpers + `@tool` wrappers
+  - `cf_tools.py` - CloudFormation tools (8) with pure helpers + `@tool` wrappers
+  - `tools.py` - AWS inspection tools (3) with pure helpers + `@tool` wrappers
   - `bedrock.py` - BedrockModel factory with prompt caching
   - `config.py` - Dual-mode config (local/AgentCore)
   - `entrypoint.py` - AgentCore Runtime entry point (deferred imports)
@@ -90,6 +107,9 @@ terraform apply    # builds + uploads + deploys in one command
 - AgentCore Memory sessionId/actorId must match `[a-zA-Z0-9][a-zA-Z0-9-_]*` -- use `_sanitize_memory_id()`
 - Bedrock Converse API: every `toolResult` must have matching `toolUse` -- memory can break this
 - `_CODE_VERSION` env var trick needed to force AgentCore redeploy on S3 code changes
+- CF template body max 51,200 bytes -- use S3 for larger templates
+- IAM roles in CF templates must start with `agentcore-cf-` (permission boundary)
+- All agent-created stacks tagged `ManagedBy=agentcore-bootstrapper` -- delete_stack refuses untagged stacks
 
 ## References
 

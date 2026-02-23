@@ -33,35 +33,33 @@ resource "aws_iam_role" "runtime" {
 }
 
 # ---------------------------------------------------------------------------
-# Runtime permissions
+# AWS managed ReadOnlyAccess -- covers all Describe/List/Get across services
+# Used by describe_account, get_spending, and search_logs tools
 # ---------------------------------------------------------------------------
 
-data "aws_iam_policy_document" "runtime_permissions" {
+resource "aws_iam_role_policy_attachment" "readonly" {
+  role       = aws_iam_role.runtime.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
 
-  # CloudWatch Logs -- log group management
+# ---------------------------------------------------------------------------
+# Additional write permissions (not covered by ReadOnlyAccess)
+# ---------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "runtime_write_permissions" {
+
+  # CloudWatch Logs -- AgentCore runtime logging (write)
   statement {
-    sid    = "CloudWatchLogsGroup"
+    sid    = "CloudWatchLogsWrite"
     effect = "Allow"
     actions = [
       "logs:CreateLogGroup",
-      "logs:DescribeLogGroups",
-      "logs:DescribeLogStreams",
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
       "logs:PutRetentionPolicy",
     ]
     resources = [
       "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
-    ]
-  }
-
-  # CloudWatch Logs -- write log events
-  statement {
-    sid    = "CloudWatchLogsStream"
-    effect = "Allow"
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-    ]
-    resources = [
       "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*",
     ]
   }
@@ -73,8 +71,6 @@ data "aws_iam_policy_document" "runtime_permissions" {
     actions = [
       "xray:PutTraceSegments",
       "xray:PutTelemetryRecords",
-      "xray:GetSamplingRules",
-      "xray:GetSamplingTargets",
     ]
     resources = ["*"]
   }
@@ -115,6 +111,141 @@ data "aws_iam_policy_document" "runtime_permissions" {
     resources = ["${aws_s3_bucket.code.arn}/*"]
   }
 
+  # CloudFormation -- stack management
+  statement {
+    sid    = "CloudFormationManagement"
+    effect = "Allow"
+    actions = [
+      "cloudformation:CreateStack",
+      "cloudformation:UpdateStack",
+      "cloudformation:DeleteStack",
+      "cloudformation:CreateChangeSet",
+      "cloudformation:ExecuteChangeSet",
+      "cloudformation:DeleteChangeSet",
+      "cloudformation:DescribeChangeSet",
+      "cloudformation:DescribeStacks",
+      "cloudformation:DescribeStackEvents",
+      "cloudformation:ListStacks",
+      "cloudformation:ListStackResources",
+      "cloudformation:GetTemplate",
+      "cloudformation:GetTemplateSummary",
+      "cloudformation:ValidateTemplate",
+      "cloudformation:TagResource",
+    ]
+    resources = ["*"]
+  }
+
+  # IAM for CloudFormation-created roles (scoped to agentcore-cf-* prefix)
+  statement {
+    sid    = "IAMForCloudFormation"
+    effect = "Allow"
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:GetRole",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:PassRole",
+      "iam:TagRole",
+      "iam:ListRolePolicies",
+      "iam:ListAttachedRolePolicies",
+      "iam:GetRolePolicy",
+    ]
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/agentcore-cf-*",
+    ]
+  }
+
+  # Resource creation permissions for CloudFormation-managed services
+  statement {
+    sid    = "ResourceCreation"
+    effect = "Allow"
+    actions = [
+      # DynamoDB
+      "dynamodb:CreateTable",
+      "dynamodb:DeleteTable",
+      "dynamodb:UpdateTable",
+      "dynamodb:DescribeTable",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
+      "dynamodb:UpdateTimeToLive",
+      "dynamodb:DescribeTimeToLive",
+      # Lambda
+      "lambda:CreateFunction",
+      "lambda:DeleteFunction",
+      "lambda:UpdateFunctionCode",
+      "lambda:UpdateFunctionConfiguration",
+      "lambda:AddPermission",
+      "lambda:RemovePermission",
+      "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration",
+      "lambda:TagResource",
+      "lambda:PutFunctionEventInvokeConfig",
+      "lambda:CreateEventSourceMapping",
+      "lambda:DeleteEventSourceMapping",
+      # API Gateway
+      "apigateway:POST",
+      "apigateway:GET",
+      "apigateway:PUT",
+      "apigateway:DELETE",
+      "apigateway:PATCH",
+      # S3
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:PutBucketPolicy",
+      "s3:DeleteBucketPolicy",
+      "s3:PutBucketTagging",
+      "s3:PutEncryptionConfiguration",
+      "s3:PutBucketVersioning",
+      "s3:PutBucketPublicAccessBlock",
+      # SQS
+      "sqs:CreateQueue",
+      "sqs:DeleteQueue",
+      "sqs:SetQueueAttributes",
+      "sqs:GetQueueAttributes",
+      "sqs:TagQueue",
+      # SNS
+      "sns:CreateTopic",
+      "sns:DeleteTopic",
+      "sns:Subscribe",
+      "sns:Unsubscribe",
+      "sns:SetTopicAttributes",
+      "sns:TagResource",
+      # CloudWatch
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:DeleteAlarms",
+      "cloudwatch:PutDashboard",
+      "cloudwatch:DeleteDashboards",
+      # CloudWatch Logs (for Lambda log groups)
+      "logs:CreateLogGroup",
+      "logs:DeleteLogGroup",
+      "logs:PutRetentionPolicy",
+      "logs:TagResource",
+      # EC2 (security groups)
+      "ec2:CreateSecurityGroup",
+      "ec2:DeleteSecurityGroup",
+      "ec2:AuthorizeSecurityGroupIngress",
+      "ec2:AuthorizeSecurityGroupEgress",
+      "ec2:RevokeSecurityGroupIngress",
+      "ec2:RevokeSecurityGroupEgress",
+      "ec2:CreateTags",
+      # Step Functions
+      "states:CreateStateMachine",
+      "states:DeleteStateMachine",
+      "states:UpdateStateMachine",
+      "states:TagResource",
+      # EventBridge
+      "events:PutRule",
+      "events:DeleteRule",
+      "events:PutTargets",
+      "events:RemoveTargets",
+      "events:TagResource",
+    ]
+    resources = ["*"]
+  }
+
   # AgentCore Memory -- session event read/write
   statement {
     sid    = "AgentCoreMemory"
@@ -136,5 +267,5 @@ data "aws_iam_policy_document" "runtime_permissions" {
 resource "aws_iam_role_policy" "runtime" {
   name   = "${local.name}-runtime-policy"
   role   = aws_iam_role.runtime.id
-  policy = data.aws_iam_policy_document.runtime_permissions.json
+  policy = data.aws_iam_policy_document.runtime_write_permissions.json
 }

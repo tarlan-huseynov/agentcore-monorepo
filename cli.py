@@ -98,7 +98,7 @@ def main() -> int:
     print(bold("=" * 50))
     print(bold("  AgentCore Demo CLI"))
     print(bold("=" * 50))
-    print(dim("  Tools: get_weather, get_time, tell_joke"))
+    print(dim("  Tools: CloudFormation (8) + AWS inspection (3)"))
     print(dim("  Type :quit to exit"))
     print(bold("=" * 50))
     print()

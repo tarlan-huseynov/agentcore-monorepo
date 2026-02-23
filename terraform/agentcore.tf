@@ -1,15 +1,13 @@
 # ---------------------------------------------------------------------------
 # AgentCore Agent Runtime
 #
-# This is the core resource.  Compare this declarative block to the 130-line
-# deploy.sh in the ATHENA project that must read-modify-write every field.
-# With Terraform, you declare the desired state once.  Change one field,
-# run `terraform apply`, and only that field changes.
+# This is the core resource.  Declare the desired state once, change one
+# field, run `terraform apply`, and only that field changes.
 # ---------------------------------------------------------------------------
 
 resource "aws_bedrockagentcore_agent_runtime" "demo" {
   agent_runtime_name = replace(var.project_name, "-", "_")
-  description        = "Demo: Strands Agents + Bedrock + AgentCore Memory (Terraform-deployed)"
+  description        = "Infrastructure Bootstrapper: Strands Agent + CloudFormation + Bedrock + Memory"
   role_arn           = aws_iam_role.runtime.arn
 
   agent_runtime_artifact {

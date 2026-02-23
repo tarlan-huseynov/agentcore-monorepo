@@ -1,89 +1,254 @@
-"""Demo tools for the AgentCore showcase.
+"""AWS account inspection tools for the Infrastructure Bootstrapper.
 
-Three lightweight tools that demonstrate the Strands @tool pattern
-with context injection via invocation_state.  No external API calls.
+Three read-only tools for AWS account introspection:
+- describe_account: Overview of EC2, Lambda, S3, RDS, DynamoDB, ECS, and CloudWatch alarms
+- get_spending: Cost breakdown via Cost Explorer
+- search_logs: CloudWatch Logs search (can read the agent's own logs)
 """
 
 from __future__ import annotations
 
 import logging
-import random
 from datetime import datetime, timedelta, timezone
 
+import boto3
+from botocore.exceptions import ClientError
 from strands import tool
 from strands.types.tools import ToolContext
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
 # Pure business-logic helpers (no framework dependency)
 # ---------------------------------------------------------------------------
 
-_WEATHER_DATA = {
-    "new york": {"temp_c": 22, "condition": "Partly cloudy", "humidity": 65},
-    "london": {"temp_c": 15, "condition": "Overcast", "humidity": 80},
-    "tokyo": {"temp_c": 28, "condition": "Sunny", "humidity": 55},
-    "sydney": {"temp_c": 19, "condition": "Clear", "humidity": 50},
-    "paris": {"temp_c": 18, "condition": "Light rain", "humidity": 75},
-    "berlin": {"temp_c": 16, "condition": "Cloudy", "humidity": 70},
-    "dubai": {"temp_c": 38, "condition": "Sunny", "humidity": 30},
-    "singapore": {"temp_c": 31, "condition": "Thunderstorms", "humidity": 85},
-}
 
-_TIMEZONE_OFFSETS: dict[str, float] = {
-    "utc": 0, "gmt": 0,
-    "est": -5, "cst": -6, "mst": -7, "pst": -8,
-    "cet": 1, "eet": 2, "ist": 5.5, "jst": 9, "aest": 10,
-    "us/eastern": -5, "us/pacific": -8,
-    "europe/london": 0, "europe/paris": 1,
-    "asia/tokyo": 9, "asia/singapore": 8,
-}
+def _describe_account(session: boto3.Session, region: str) -> str:
+    """Describe key resources in the AWS account."""
+    sections = []
 
-_JOKES: dict[str, list[str]] = {
-    "programming": [
-        "Why do programmers prefer dark mode? Because light attracts bugs.",
-        "There are only 10 types of people: those who understand binary and those who don't.",
-        "A SQL query walks into a bar, sees two tables, and asks: 'Can I JOIN you?'",
-    ],
-    "cloud": [
-        "Why did the cloud architect break up? Too many attachment issues.",
-        "I told my server a joke. It didn't laugh -- it just returned 200 OK.",
-        "There's no place like 127.0.0.1.",
-    ],
-    "general": [
-        "Why don't scientists trust atoms? Because they make up everything.",
-        "I would tell you a UDP joke, but you might not get it.",
-        "Why did the developer go broke? Because he used up all his cache.",
-    ],
-}
+    # EC2 instances
+    try:
+        ec2 = session.client("ec2", region_name=region)
+        resp = ec2.describe_instances()
+        instances = []
+        for res in resp.get("Reservations", []):
+            for inst in res.get("Instances", []):
+                name = ""
+                for tag in inst.get("Tags", []):
+                    if tag["Key"] == "Name":
+                        name = tag["Value"]
+                        break
+                instances.append(
+                    f"  - {name or '(unnamed)'} ({inst['InstanceId']}): "
+                    f"{inst['InstanceType']}, {inst['State']['Name']}, "
+                    f"{inst.get('Placement', {}).get('AvailabilityZone', '?')}"
+                )
+        if instances:
+            sections.append(f"EC2 Instances ({len(instances)}):\n" + "\n".join(instances))
+        else:
+            sections.append("EC2 Instances: none")
+    except ClientError as e:
+        sections.append(f"EC2: error - {e}")
+
+    # Lambda functions
+    try:
+        lam = session.client("lambda", region_name=region)
+        resp = lam.list_functions()
+        functions = resp.get("Functions", [])
+        if functions:
+            lines = [
+                f"  - {f['FunctionName']}: {f.get('Runtime', 'n/a')}, {f['MemorySize']}MB"
+                for f in functions
+            ]
+            sections.append(f"Lambda Functions ({len(functions)}):\n" + "\n".join(lines))
+        else:
+            sections.append("Lambda Functions: none")
+    except ClientError as e:
+        sections.append(f"Lambda: error - {e}")
+
+    # S3 buckets
+    try:
+        s3 = session.client("s3")
+        resp = s3.list_buckets()
+        buckets = resp.get("Buckets", [])
+        if buckets:
+            lines = [
+                f"  - {b['Name']} (created {b['CreationDate'].strftime('%Y-%m-%d')})"
+                for b in buckets[:15]
+            ]
+            if len(buckets) > 15:
+                lines.append(f"  ... and {len(buckets) - 15} more")
+            sections.append(f"S3 Buckets ({len(buckets)}):\n" + "\n".join(lines))
+        else:
+            sections.append("S3 Buckets: none")
+    except ClientError as e:
+        sections.append(f"S3: error - {e}")
+
+    # RDS instances
+    try:
+        rds = session.client("rds", region_name=region)
+        resp = rds.describe_db_instances()
+        dbs = resp.get("DBInstances", [])
+        if dbs:
+            lines = [
+                f"  - {d['DBInstanceIdentifier']}: {d['Engine']} {d.get('EngineVersion', '')}, "
+                f"{d['DBInstanceClass']}, {d['DBInstanceStatus']}"
+                for d in dbs
+            ]
+            sections.append(f"RDS Instances ({len(dbs)}):\n" + "\n".join(lines))
+        else:
+            sections.append("RDS Instances: none")
+    except ClientError as e:
+        sections.append(f"RDS: error - {e}")
+
+    # DynamoDB tables
+    try:
+        ddb = session.client("dynamodb", region_name=region)
+        resp = ddb.list_tables()
+        tables = resp.get("TableNames", [])
+        if tables:
+            lines = [f"  - {t}" for t in tables[:20]]
+            if len(tables) > 20:
+                lines.append(f"  ... and {len(tables) - 20} more")
+            sections.append(f"DynamoDB Tables ({len(tables)}):\n" + "\n".join(lines))
+        else:
+            sections.append("DynamoDB Tables: none")
+    except ClientError as e:
+        sections.append(f"DynamoDB: error - {e}")
+
+    # ECS clusters
+    try:
+        ecs = session.client("ecs", region_name=region)
+        resp = ecs.list_clusters()
+        cluster_arns = resp.get("clusterArns", [])
+        if cluster_arns:
+            detail = ecs.describe_clusters(clusters=cluster_arns)
+            lines = [
+                f"  - {c['clusterName']}: {c.get('runningTasksCount', 0)} running tasks, "
+                f"{c.get('activeServicesCount', 0)} services"
+                for c in detail.get("clusters", [])
+            ]
+            sections.append(f"ECS Clusters ({len(cluster_arns)}):\n" + "\n".join(lines))
+        else:
+            sections.append("ECS Clusters: none")
+    except ClientError as e:
+        sections.append(f"ECS: error - {e}")
+
+    # CloudWatch alarms in ALARM state
+    try:
+        cw = session.client("cloudwatch", region_name=region)
+        resp = cw.describe_alarms(StateValue="ALARM")
+        alarms = resp.get("MetricAlarms", []) + resp.get("CompositeAlarms", [])
+        if alarms:
+            lines = [
+                f"  - [ALARM] {a['AlarmName']}: {a.get('AlarmDescription', 'no description')}"
+                for a in alarms
+            ]
+            sections.append(f"Active Alarms ({len(alarms)}):\n" + "\n".join(lines))
+        else:
+            sections.append("CloudWatch Alarms: all clear, no alarms firing")
+    except ClientError as e:
+        sections.append(f"CloudWatch Alarms: error - {e}")
+
+    header = f"AWS Account Overview (region: {region})"
+    return f"{header}\n{'=' * len(header)}\n\n" + "\n\n".join(sections)
 
 
-def _get_weather(city: str) -> str:
-    key = city.strip().lower()
-    data = _WEATHER_DATA.get(key)
-    if data is None:
-        available = ", ".join(sorted(_WEATHER_DATA.keys()))
-        return f"No weather data for '{city}'. Available cities: {available}"
-    return (
-        f"Weather in {city.title()}: {data['condition']}, "
-        f"{data['temp_c']}\u00b0C, humidity {data['humidity']}%"
+def _get_spending(session: boto3.Session, days: int = 7) -> str:
+    """Get AWS spending breakdown by service."""
+    days = max(1, min(days, 90))
+
+    # Cost Explorer endpoint is only in us-east-1
+    ce = session.client("ce", region_name="us-east-1")
+
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=days)
+
+    resp = ce.get_cost_and_usage(
+        TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
+        Granularity="DAILY" if days <= 14 else "MONTHLY",
+        Metrics=["UnblendedCost"],
+        GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
     )
 
+    service_costs: dict[str, float] = {}
+    for result in resp.get("ResultsByTime", []):
+        for group in result.get("Groups", []):
+            service = group["Keys"][0]
+            amount = float(group["Metrics"]["UnblendedCost"]["Amount"])
+            service_costs[service] = service_costs.get(service, 0) + amount
 
-def _get_time(tz: str) -> str:
-    key = tz.strip().lower()
-    offset = _TIMEZONE_OFFSETS.get(key)
-    if offset is None:
-        available = ", ".join(sorted(_TIMEZONE_OFFSETS.keys()))
-        return f"Unknown timezone '{tz}'. Available: {available}"
-    now = datetime.now(timezone.utc) + timedelta(hours=offset)
-    return f"Current time in {tz.upper()}: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+    total = sum(service_costs.values())
+    sorted_services = sorted(service_costs.items(), key=lambda x: x[1], reverse=True)
+
+    lines = [f"AWS Spending (last {days} days): ${total:.2f} USD", ""]
+    for service, cost in sorted_services:
+        if cost > 0.001:
+            pct = (cost / total * 100) if total > 0 else 0
+            lines.append(f"  ${cost:>8.2f}  ({pct:>5.1f}%)  {service}")
+
+    return "\n".join(lines)
 
 
-def _get_joke(topic: str) -> str:
-    key = topic.strip().lower()
-    jokes = _JOKES.get(key, _JOKES["general"])
-    return random.choice(jokes)
+def _search_logs(
+    session: boto3.Session,
+    region: str,
+    log_group: str,
+    filter_pattern: str = "",
+    minutes: int = 30,
+) -> str:
+    """Search CloudWatch Logs for recent entries."""
+    minutes = max(1, min(minutes, 1440))
+
+    logs = session.client("logs", region_name=region)
+
+    # List available log groups when none specified
+    if not log_group.strip():
+        resp = logs.describe_log_groups(limit=25)
+        groups = resp.get("logGroups", [])
+        if not groups:
+            return "No log groups found in this region."
+        lines = ["Available log groups:"]
+        for g in groups:
+            lines.append(f"  - {g['logGroupName']}")
+        return "\n".join(lines)
+
+    start_ms = int((datetime.now(timezone.utc) - timedelta(minutes=minutes)).timestamp() * 1000)
+    end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+    kwargs: dict = {
+        "logGroupName": log_group,
+        "startTime": start_ms,
+        "endTime": end_ms,
+        "limit": 50,
+    }
+    if filter_pattern.strip():
+        kwargs["filterPattern"] = filter_pattern
+
+    resp = logs.filter_log_events(**kwargs)
+    events = resp.get("events", [])
+
+    if not events:
+        return (
+            f"No log events found in '{log_group}' "
+            f"(last {minutes} min, filter: '{filter_pattern or 'none'}')"
+        )
+
+    lines = [
+        f"Logs from '{log_group}' (last {minutes} min, {len(events)} events):"
+    ]
+    for event in events:
+        ts = datetime.fromtimestamp(
+            event["timestamp"] / 1000, tz=timezone.utc
+        ).strftime("%H:%M:%S")
+        msg = event["message"].strip()
+        if len(msg) > 300:
+            msg = msg[:300] + "..."
+        lines.append(f"  [{ts}] {msg}")
+
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -92,45 +257,53 @@ def _get_joke(topic: str) -> str:
 
 
 @tool(context=True)
-def get_weather(city: str, tool_context: ToolContext) -> str:
-    """Get the current weather for a city.
+def describe_account(region: str, tool_context: ToolContext) -> str:
+    """Describe key resources in an AWS account: EC2, Lambda, S3, RDS, DynamoDB,
+    ECS clusters, and active CloudWatch alarms.
 
     Args:
-        city: City name (e.g. "New York", "London", "Tokyo").
+        region: AWS region to inspect (e.g. "eu-central-1", "us-east-1").
     """
-    result = _get_weather(city)
+    result = _describe_account(boto3.Session(), region)
     state = tool_context.invocation_state
     state.setdefault("tool_calls", []).append(
-        {"tool": "get_weather", "args": {"city": city}}
+        {"tool": "describe_account", "args": {"region": region}}
     )
     return result
 
 
 @tool(context=True)
-def get_time(timezone_name: str, tool_context: ToolContext) -> str:
-    """Get the current time in a specific timezone.
+def get_spending(days: int, tool_context: ToolContext) -> str:
+    """Get AWS spending breakdown by service for the last N days.
 
     Args:
-        timezone_name: Timezone identifier (e.g. "EST", "UTC", "JST", "PST").
+        days: Number of days to look back (1-90).
     """
-    result = _get_time(timezone_name)
+    result = _get_spending(boto3.Session(), days)
     state = tool_context.invocation_state
     state.setdefault("tool_calls", []).append(
-        {"tool": "get_time", "args": {"timezone": timezone_name}}
+        {"tool": "get_spending", "args": {"days": days}}
     )
     return result
 
 
 @tool(context=True)
-def tell_joke(topic: str, tool_context: ToolContext) -> str:
-    """Tell a joke about a topic.
+def search_logs(
+    log_group: str, filter_pattern: str, minutes: int, tool_context: ToolContext
+) -> str:
+    """Search CloudWatch Logs for recent entries. Pass an empty log_group to
+    list available log groups.
 
     Args:
-        topic: Topic for the joke (e.g. "programming", "cloud", "general").
+        log_group: CloudWatch log group name. Pass empty string to list groups.
+        filter_pattern: CloudWatch filter pattern (e.g. "ERROR", "timeout"). Empty for all.
+        minutes: How many minutes back to search (1-1440).
     """
-    result = _get_joke(topic)
+    session = boto3.Session()
+    region = session.region_name or "eu-central-1"
+    result = _search_logs(session, region, log_group, filter_pattern, minutes)
     state = tool_context.invocation_state
     state.setdefault("tool_calls", []).append(
-        {"tool": "tell_joke", "args": {"topic": topic}}
+        {"tool": "search_logs", "args": {"log_group": log_group, "filter_pattern": filter_pattern, "minutes": minutes}}
     )
     return result

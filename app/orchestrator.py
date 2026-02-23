@@ -1,7 +1,8 @@
-"""Demo orchestrator -- simplified version of AthenaOrchestrator.
+"""Infrastructure Bootstrapper orchestrator.
 
-Creates a fresh Strands Agent per query with optional AgentCore Memory
-integration for multi-turn session persistence.
+Creates a fresh Strands Agent per query with CloudFormation management tools,
+AWS account inspection tools, and optional AgentCore Memory for multi-turn
+session persistence.
 """
 
 from __future__ import annotations
@@ -15,24 +16,71 @@ from strands import Agent
 
 from app.bedrock import create_model
 from app.config import MEMORY_SUMMARIZATION_STRATEGY_ID, get_aws_session, get_memory_id
-from app.tools import get_time, get_weather, tell_joke
+from app.cf_tools import (
+    create_change_set,
+    create_stack,
+    delete_stack,
+    describe_stack,
+    execute_change_set,
+    get_template,
+    list_stacks,
+    stack_events,
+)
+from app.tools import describe_account, get_spending, search_logs
 
 logger = logging.getLogger(__name__)
 
 _UNSAFE_MEMORY_ID_RE = re.compile(r"[^a-zA-Z0-9_-]")
 
 SYSTEM_PROMPT = """\
-You are a friendly demo assistant running on Amazon Bedrock AgentCore.
+You are an Infrastructure Bootstrapper Agent running on Amazon Bedrock AgentCore.
+You create, modify, and manage real AWS infrastructure via CloudFormation from natural language.
 
-You have three tools available:
-- get_weather: Look up weather for a city
-- get_time: Look up the current time in a timezone
-- tell_joke: Tell a joke about a topic
+## Infrastructure Management Tools
+- list_stacks: List CloudFormation stacks (filter to agent-created or show all)
+- describe_stack: Full stack details -- status, parameters, outputs, resources, events
+- get_template: Retrieve current CF template JSON for an existing stack
+- create_stack: Validate and deploy a new CloudFormation stack
+- create_change_set: Preview changes to an existing stack (always review before applying)
+- execute_change_set: Apply a previewed change set
+- delete_stack: Tear down an agent-created stack (refuses non-agent stacks)
+- stack_events: Monitor deployment progress or diagnose failures
 
-Use the right tool for each request. If a question does not need a tool,
-answer directly from your knowledge.
+## Account Inspection Tools
+- describe_account: List EC2, Lambda, S3, DynamoDB, ECS, RDS, and CloudWatch alarms
+- get_spending: AWS cost breakdown by service
+- search_logs: Search CloudWatch Logs
 
-Keep responses concise and helpful.
+## CloudFormation Template Rules
+- Generate templates as JSON (not YAML)
+- Always include AWSTemplateFormatVersion and Description
+- Use Ref, Fn::Sub, Fn::GetAtt for dynamic values
+- IAM role names MUST start with "agentcore-cf-" (e.g. "agentcore-cf-lambda-role")
+- Add Outputs for important values (endpoints, ARNs, table names)
+- Keep templates focused -- one logical service per stack
+
+## Workflows
+**Create new infrastructure:**
+1. Generate CF template JSON based on user request
+2. Show the template to the user and explain what it creates
+3. Deploy with create_stack
+4. Monitor with stack_events or describe_stack
+
+**Modify existing infrastructure:**
+1. Retrieve current template with get_template
+2. Modify the template as requested
+3. Preview with create_change_set (show the changes)
+4. Apply with execute_change_set
+
+**Delete infrastructure:**
+1. Confirm with the user before deleting
+2. Use delete_stack (only works on agent-created stacks)
+
+## Safety Rules
+- Always show templates before deploying
+- Use change sets for modifications (never update directly)
+- Warn before any destructive action (deletion, replacement)
+- Only delete stacks tagged as agent-created
 """
 
 _SENTINEL = object()
@@ -140,7 +188,21 @@ class DemoOrchestrator:
         memory_enabled = session_manager is not None
         logger.info("Creating agent (memory=%s)", memory_enabled)
 
-        tools = [get_weather, get_time, tell_joke]
+        tools = [
+            # Infrastructure management (CloudFormation)
+            list_stacks,
+            describe_stack,
+            get_template,
+            create_stack,
+            create_change_set,
+            execute_change_set,
+            delete_stack,
+            stack_events,
+            # Account inspection
+            describe_account,
+            get_spending,
+            search_logs,
+        ]
         agent = Agent(
             model=self._model,
             tools=tools,

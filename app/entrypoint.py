@@ -5,7 +5,7 @@ Local usage:
 
     curl -X POST http://localhost:8080/invocations \
       -H "Content-Type: application/json" \
-      -d '{"prompt": "What is the weather in Tokyo?"}'
+      -d '{"prompt": "Create a DynamoDB table for user sessions"}'
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def invoke(payload: dict) -> dict:
     Expected payload::
 
         {
-            "prompt": "What's the weather in Tokyo?",
+            "prompt": "Create a DynamoDB table for user sessions",
             "session_id": "optional-session-id",
             "actor_id": "optional-actor-id"
         }
