@@ -19,7 +19,7 @@ load_dotenv(dotenv_path=_env_path)
 # ---------------------------------------------------------------------------
 BEDROCK_MODEL_ID: str = os.getenv(
     "BEDROCK_MODEL_ID",
-    "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "eu.anthropic.claude-sonnet-4-6",
 )
 
 # ---------------------------------------------------------------------------

@@ -99,7 +99,7 @@ Backed by the [awslabs Cost Explorer MCP Server](https://github.com/awslabs/mcp/
 
 ## Prerequisites
 
-- **AWS account** with Bedrock model access enabled (Claude Sonnet 4.5 or later)
+- **AWS account** with Bedrock model access enabled (Claude Sonnet 4.6)
 - **[uv](https://docs.astral.sh/uv/)** — Python package manager
 - **Terraform** >= 1.5 with AWS provider >= 6.21 (required for `aws_bedrockagentcore_gateway` and MCP target resources)
 - **AWS CLI** >= 2.31.13 configured with a profile or credentials
