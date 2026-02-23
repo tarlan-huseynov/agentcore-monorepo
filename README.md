@@ -1,6 +1,6 @@
 # Infrastructure Bootstrapper Agent
 
-An AI agent that creates, modifies, and manages real AWS infrastructure from natural language — built with [Strands Agents SDK](https://strandsagents.com) and deployed to [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html). This reference implementation showcases the **AgentCore Gateway + MCP Server** pattern: the agent reaches 22 tools through a single Gateway endpoint backed by two purpose-built MCP servers.
+An AI agent that creates, modifies, and manages real AWS infrastructure from natural language — built with [Strands Agents SDK](https://strandsagents.com) and deployed to [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html). This reference implementation showcases nearly every AgentCore pillar — **Runtime, Memory, Gateway, MCP, and Policy** — in one demo: the agent reaches 22 tools through a single Gateway endpoint backed by two purpose-built MCP servers, with Cedar policies enforcing safety guardrails.
 
 > *"Create a DynamoDB table for user sessions"* → agent calls CCAPI MCP → resource created → returns ARN.
 > *"What did we spend on Lambda last month?"* → agent calls Cost Explorer MCP → breakdown returned.
@@ -21,7 +21,7 @@ User Query
      |                         |
      v                         v
 [AgentCore Gateway]        search_logs
-     |
+     |  (Cedar Policy)
      +---------------------------+
      |                           |
      v                           v
@@ -48,6 +48,9 @@ terraform/
 ├── gateway.tf         AgentCore Gateway + 2 Gateway Targets
 ├── mcp_runtimes.tf    CCAPI + Cost Explorer MCP Runtimes (MCP protocol)
 ├── gateway_iam.tf     Gateway role + CCAPI MCP role + Cost MCP role
+├── policy.tf          Cedar policy engine setup (via AWS CLI)
+├── policies/          Cedar policy files
+│   └── safety.cedar   Safety guardrails (resource type restrictions)
 └── outputs.tf         Runtime IDs, Gateway URL, invoke command
 ```
 
@@ -269,12 +272,26 @@ Four IAM roles are created. Each role is scoped to its exact function.
 | Cost Explorer | `ce:GetCostAndUsage`, `ce:GetCostForecast`, etc. | Read-only billing queries |
 | CloudWatch Logs write | AgentCore log groups | Runtime logging |
 
+## Safety Guardrails (Cedar Policy)
+
+A Cedar policy engine attached to the Gateway enforces deterministic safety rules on every MCP tool call — independent of prompt engineering:
+
+| Rule | What it does |
+|------|-------------|
+| **Read-only tools: always allowed** | `list_resources`, `get_resource`, `explain`, `run_checkov`, all Cost Explorer tools — no restrictions |
+| **Create/update: resource type allowlist** | Only DynamoDB, S3, SQS, SNS, Lambda, EventBridge, CloudWatch, API Gateway, Step Functions, Log Groups |
+| **Delete: restricted allowlist** | Only DynamoDB, SQS, SNS, CloudWatch Alarms, Log Groups — cannot delete S3 buckets, Lambda functions, etc. |
+| **Default deny** | Any tool/action not explicitly permitted is blocked by the Gateway |
+
+Policy is defined in `terraform/policies/safety.cedar` and enforced in `ENFORCE` mode. Change to `LOG_ONLY` mode during development to test without blocking.
+
 ## Design Principles
 
 - **Gateway as tool aggregator** — the agent connects to one MCP endpoint and discovers all 21 Gateway-backed tools; no per-service wiring in the orchestrator
 - **MCP as the integration protocol** — both MCP server runtimes speak streamable-http MCP; the Gateway handles auth, routing, and tool namespacing
 - **Hybrid tool pattern** — MCP tools for infrastructure work, a direct `@tool` function for log search; mix as appropriate for each use case
 - **Purpose-built MCP servers** — CCAPI and Cost Explorer servers run as isolated runtimes with minimal, scoped IAM roles; blast radius is contained
+- **Cedar Policy as guardrails** — deterministic safety enforcement at the Gateway level; restricts which resource types the agent can create, update, or delete; no prompt engineering required
 - **Strands Agent as orchestrator** — the agentic loop is handled entirely by the SDK, including MCP client management
 - **Deferred imports** — heavy deps imported at first invocation to stay within the AgentCore 30s init timeout
 - **Memory graceful degradation** — agent works without memory if init fails
@@ -287,6 +304,6 @@ cd terraform
 terraform destroy
 ```
 
-This removes all Terraform-managed resources: 3 Runtimes, 1 Gateway, 2 Gateway Targets, Memory, IAM roles, and the S3 bucket (`force_destroy = true`).
+This removes all Terraform-managed resources: 3 Runtimes, 1 Gateway, 2 Gateway Targets, Policy Engine, Memory, IAM roles, and the S3 bucket (`force_destroy = true`).
 
 **Note:** Resources created by the agent via CCAPI (DynamoDB tables, Lambda functions, S3 buckets, etc.) are *not* managed by Terraform. Delete them separately using the agent or the AWS Console before running `terraform destroy`.

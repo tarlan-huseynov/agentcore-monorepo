@@ -9,6 +9,7 @@ modifies, and manages real AWS infrastructure from natural language:
 - **AgentCore Gateway + MCP Servers** for infrastructure and cost tooling
 - **Cloud Control API** (1100+ resource types) via CCAPI MCP Server
 - **AgentCore Memory** for multi-turn session persistence
+- **AgentCore Policy** (Cedar) for deterministic safety guardrails
 - **Terraform** for single-command deployment
 
 ## What This Is NOT
@@ -29,6 +30,7 @@ User Query ("I need a REST API with DynamoDB")
   |                    |
   v                    v
 [AgentCore Gateway]    search_logs (CloudWatch Logs)
+  |  (Cedar Policy)
   |              |
   v              v
 [CCAPI MCP]    [Cost Explorer MCP]
@@ -58,6 +60,8 @@ For detailed architecture, see `@.claude/prompts/architecture.md`.
   - `gateway.tf` - AgentCore Gateway
   - `mcp_runtimes.tf` - MCP Server Runtimes (CCAPI + Cost Explorer)
   - `gateway_iam.tf` - Gateway + MCP IAM roles
+  - `policy.tf` - Cedar policy engine setup (via AWS CLI)
+  - `policies/safety.cedar` - Cedar safety guardrails
   - (plus S3, IAM, main Runtime, Memory, Logging)
 
 ## Key Constraints
@@ -113,6 +117,9 @@ terraform apply    # builds + uploads + deploys in one command
 - Cost Explorer MCP server object: `from awslabs.cost_explorer_mcp_server.server import app`
 - `GATEWAY_URL` env var must be set for MCP tools to work (injected by Terraform)
 - `mcp` package is already a transitive dep of `strands-agents` -- no separate install needed
+- Cedar policy action format: `TargetName___tool_name` (three underscores)
+- No Terraform resource for Policy Engine -- uses `null_resource` + AWS CLI (`bedrock-agentcore-control`)
+- AgentCore MCP servers must bind to `0.0.0.0:8000/mcp` with `stateless_http=True`
 
 ## References
 

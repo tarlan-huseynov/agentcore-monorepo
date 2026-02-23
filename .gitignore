@@ -14,12 +14,17 @@ __pycache__/
 # Deployment
 deployment_package/
 deployment_package.zip
+mcp_ccapi_package/
+mcp_ccapi_package.zip
+mcp_cost_package/
+mcp_cost_package.zip
 
 # Terraform
 terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/.terraform.lock.hcl
+terraform/.policy_outputs/
 
 # IDE
 .idea/
