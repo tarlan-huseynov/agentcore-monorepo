@@ -38,7 +38,10 @@ resource "aws_bedrockagentcore_gateway_target" "ccapi" {
   }
 
   credential_provider_configuration {
-    gateway_iam_role {}
+    oauth {
+      provider_arn = aws_bedrockagentcore_oauth2_credential_provider.gateway_m2m.credential_provider_arn
+      scopes       = aws_cognito_resource_server.mcp.scope_identifiers
+    }
   }
 }
 
@@ -56,6 +59,9 @@ resource "aws_bedrockagentcore_gateway_target" "cost_explorer" {
   }
 
   credential_provider_configuration {
-    gateway_iam_role {}
+    oauth {
+      provider_arn = aws_bedrockagentcore_oauth2_credential_provider.gateway_m2m.credential_provider_arn
+      scopes       = aws_cognito_resource_server.mcp.scope_identifiers
+    }
   }
 }

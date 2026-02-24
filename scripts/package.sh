@@ -28,7 +28,7 @@ mkdir -p "$BUILD_DIR"
 
 # Step 2: Install ARM64 dependencies
 echo "=== Installing ARM64 dependencies ==="
-uv export --no-dev --frozen --no-hashes -o "$BUILD_DIR/_requirements.txt"
+uv pip compile "$PROJECT_ROOT/pyproject.toml" -o "$BUILD_DIR/_requirements.txt"
 uv pip install \
     --python-platform aarch64-manylinux2014 \
     --python-version "$PYTHON_VERSION" \
