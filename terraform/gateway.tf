@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 
 resource "aws_bedrockagentcore_gateway" "main" {
-  name            = replace("${local.name}-gateway", "-", "_")
+  name            = "${local.name}-gateway"
   description     = "MCP Gateway: CCAPI + Cost Explorer tools"
   role_arn        = aws_iam_role.gateway.arn
   protocol_type   = "MCP"
@@ -12,7 +12,7 @@ resource "aws_bedrockagentcore_gateway" "main" {
   protocol_configuration {
     mcp {
       instructions       = "Gateway for infrastructure management and cost analysis"
-      search_type        = "HYBRID"
+      search_type        = "SEMANTIC"
       supported_versions = ["2025-03-26", "2025-06-18"]
     }
   }
@@ -25,14 +25,14 @@ resource "aws_bedrockagentcore_gateway" "main" {
 # ---------------------------------------------------------------------------
 
 resource "aws_bedrockagentcore_gateway_target" "ccapi" {
-  name               = "ccapi_mcp_server"
+  name               = "ccapi-mcp-server"
   description        = "Cloud Control API — infrastructure CRUDL for 1100+ resource types"
   gateway_identifier = aws_bedrockagentcore_gateway.main.gateway_id
 
   target_configuration {
     mcp {
       mcp_server {
-        endpoint = "https://${aws_bedrockagentcore_agent_runtime.ccapi.agent_runtime_endpoint}/mcp"
+        endpoint = "https://bedrock-agentcore.${local.region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.ccapi.agent_runtime_arn)}/invocations"
       }
     }
   }
@@ -43,14 +43,14 @@ resource "aws_bedrockagentcore_gateway_target" "ccapi" {
 }
 
 resource "aws_bedrockagentcore_gateway_target" "cost_explorer" {
-  name               = "cost_explorer_mcp_server"
+  name               = "cost-explorer-mcp-server"
   description        = "AWS Cost Explorer — spending analysis and forecasts"
   gateway_identifier = aws_bedrockagentcore_gateway.main.gateway_id
 
   target_configuration {
     mcp {
       mcp_server {
-        endpoint = "https://${aws_bedrockagentcore_agent_runtime.cost_explorer.agent_runtime_endpoint}/mcp"
+        endpoint = "https://bedrock-agentcore.${local.region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.cost_explorer.agent_runtime_arn)}/invocations"
       }
     }
   }

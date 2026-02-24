@@ -2,8 +2,8 @@ terraform {
   required_version = ">= 1.10"
 
   backend "s3" {
-    bucket       = "agentcore-bootstrapper-tfstate-eu-central-1"
-    key          = "agentcore-bootstrapper/terraform.tfstate"
+    bucket       = "agentcore-demo-tfstate-eu-central-1"
+    key          = "agentcore-demo/terraform.tfstate"
     region       = "eu-central-1"
     encrypt      = true
     use_lockfile = true # S3-native locking (Terraform >= 1.10)
