@@ -3,6 +3,14 @@
 #
 # Each runs as an AgentCore Runtime with MCP protocol, serving as a target
 # for the AgentCore Gateway.
+#
+# IMPORTANT — AgentCore Gateway → Runtime authentication:
+#   The Gateway uses OAuth (Cognito client_credentials Bearer tokens) to call
+#   the runtime invocations endpoint. By default, AgentCore Runtime expects
+#   SigV4 authentication. Sending OAuth tokens to a SigV4-only endpoint returns
+#   403 "Authorization method mismatch". Both runtimes therefore declare a
+#   customJWTAuthorizer that validates Cognito JWTs before forwarding requests
+#   to the FastMCP server running inside the container.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -36,12 +44,22 @@ resource "aws_bedrockagentcore_agent_runtime" "ccapi" {
     network_mode = "PUBLIC"
   }
 
+  # JWT authorizer: allows the Gateway (and direct callers) to authenticate
+  # using Cognito OAuth2 Bearer tokens instead of SigV4.
+  authorizer_configuration {
+    custom_jwt_authorizer {
+      discovery_url    = "https://cognito-idp.${local.region}.amazonaws.com/${aws_cognito_user_pool.gateway_outbound.id}/.well-known/openid-configuration"
+      allowed_clients  = [aws_cognito_user_pool_client.m2m.id]
+      allowed_audience = [aws_cognito_resource_server.mcp.identifier]
+    }
+  }
+
   environment_variables = {
     AWS_REGION        = local.region
     SECURITY_SCANNING = "enabled"
     DEFAULT_TAGS      = "enabled"
     FASTMCP_LOG_LEVEL = var.log_level
-    _CODE_VERSION     = null_resource.build_ccapi.triggers.source_hash
+    _CODE_VERSION     = null_resource.build_mcp.triggers.ccapi_hash
   }
 
   depends_on = [
@@ -81,10 +99,20 @@ resource "aws_bedrockagentcore_agent_runtime" "cost_explorer" {
     network_mode = "PUBLIC"
   }
 
+  # JWT authorizer: allows the Gateway (and direct callers) to authenticate
+  # using Cognito OAuth2 Bearer tokens instead of SigV4.
+  authorizer_configuration {
+    custom_jwt_authorizer {
+      discovery_url    = "https://cognito-idp.${local.region}.amazonaws.com/${aws_cognito_user_pool.gateway_outbound.id}/.well-known/openid-configuration"
+      allowed_clients  = [aws_cognito_user_pool_client.m2m.id]
+      allowed_audience = [aws_cognito_resource_server.mcp.identifier]
+    }
+  }
+
   environment_variables = {
     AWS_REGION        = local.region
     FASTMCP_LOG_LEVEL = var.log_level
-    _CODE_VERSION     = null_resource.build_cost.triggers.source_hash
+    _CODE_VERSION     = null_resource.build_mcp.triggers.cost_hash
   }
 
   depends_on = [

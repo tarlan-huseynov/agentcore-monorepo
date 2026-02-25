@@ -47,6 +47,14 @@ package_mcp_server() {
     echo "  Copying entry point: $entrypoint"
     cp "$PROJECT_ROOT/mcp_servers/$entrypoint" "$build_dir/"
 
+    # Apply patches: copy any override files from mcp_servers/patches/<name>/
+    # over the pip-installed versions to fix AgentCore compatibility issues.
+    local patches_dir="$PROJECT_ROOT/mcp_servers/patches/$name"
+    if [ -d "$patches_dir" ]; then
+        echo "  Applying patches from $patches_dir..."
+        cp -r "$patches_dir/." "$build_dir/"
+    fi
+
     # Clean up
     find "$build_dir" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
     find "$build_dir" -name "*.pyc" -delete 2>/dev/null || true

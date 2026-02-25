@@ -120,6 +120,9 @@ terraform apply    # builds + uploads + deploys in one command
 - Cedar policy action format: `TargetName___tool_name` (three underscores)
 - No Terraform resource for Policy Engine -- uses `null_resource` + AWS CLI (`bedrock-agentcore-control`)
 - AgentCore MCP servers must bind to `0.0.0.0:8000/mcp` with `stateless_http=True`
+- AgentCore Gateway → Runtime auth: Gateway sends OAuth Bearer tokens but Runtime defaults to SigV4 -- must set `authorizer_configuration.customJWTAuthorizer` on BOTH MCP runtimes
+- AgentCore Runtime filesystem is read-only (`/var/task`); any package that writes to `os.path.dirname(__file__)` at import time will crash -- patch via `mcp_servers/patches/<name>/` (see `schema_manager.py` fix for CCAPI)
+- CCAPI SchemaManager hardcodes `os.path.dirname(__file__)/.schemas` -- patched in `mcp_servers/patches/ccapi/` to use `/tmp/.ccapi_schemas`
 
 ## References
 
