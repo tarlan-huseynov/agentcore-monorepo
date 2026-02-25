@@ -209,23 +209,63 @@ Terraform will:
 - Create the AgentCore Memory resource
 - Deploy the Agent Runtime (HTTP protocol) with the Gateway URL injected as `GATEWAY_URL`
 
-### 3. Test the Deployed Agent
+### 3. Interact with the Deployed Agent
 
-Copy the `invoke_command` from Terraform outputs:
+After deploying, set the runtime ARN in `.env` so you don't have to pass it every time:
 
 ```bash
-terraform output -raw invoke_command | bash
+cp .env.example .env
+# Add the ARN from terraform output:
+echo "AGENTCORE_RUNTIME_ARN=$(cd terraform && terraform output -raw runtime_arn)" >> .env
 ```
 
-Or invoke directly:
+**Interactive REPL** — chat with the deployed agent, with memory across turns:
 
 ```bash
-aws bedrock-agentcore invoke-agent-runtime \
-  --agent-runtime-arn "<runtime-arn>" \
-  --content-type "application/json" \
-  --accept "application/json" \
-  --payload '{"prompt": "Create an S3 bucket called my-demo-bucket-12345"}' \
-  response.json && cat response.json
+uv run python cli_remote.py
+```
+
+```
+demo:remote> List my S3 buckets
+  Invoking runtime...
+
+--- Answer ---
+Here are the S3 buckets in your account:
+  1. agentcore-bootstrapper-code-...
+  2. my-other-bucket
+  ...
+
+  Duration: 12.3s | Stop: end_turn
+
+demo:remote> What did I spend last 7 days by service?
+
+--- Answer ---
+AWS costs for the last 7 days:
+  Amazon Bedrock: $4.21
+  Amazon S3: $0.03
+  ...
+```
+
+Built-in REPL commands:
+
+| Command | What it does |
+|---------|-------------|
+| `:new` | Start a new session (fresh memory) |
+| `:memory` | Show memory/session details |
+| `:logs [min]` | Show recent CloudWatch runtime logs |
+| `:debug` | Toggle debug output (raw API response) |
+| `:quit` / `:q` | Exit |
+
+**Single query** — non-interactive, useful for scripting:
+
+```bash
+uv run python cli_remote.py -q "List my S3 buckets"
+```
+
+**Raw AWS CLI** — invoke the runtime directly without the CLI wrapper:
+
+```bash
+terraform -chdir=terraform output -raw invoke_command | bash
 ```
 
 ## E2E Tests
@@ -258,6 +298,7 @@ agentcore-demo/
 │   ├── ccapi_entrypoint.py         CCAPI MCP server (streamable-http)
 │   └── cost_entrypoint.py          Cost Explorer MCP server (streamable-http)
 ├── cli.py                          Interactive REPL for local development
+├── cli_remote.py                   Interactive REPL for deployed agent (via AgentCore API)
 ├── scripts/
 │   ├── package.sh                  ARM64 packaging for the agent runtime
 │   ├── package_mcp.sh              ARM64 packaging for both MCP servers
