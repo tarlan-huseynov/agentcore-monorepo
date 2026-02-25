@@ -68,7 +68,7 @@ def print_result(result: dict, duration: float) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="AgentCore Demo CLI")
+    parser = argparse.ArgumentParser(description="AgentCore Bootstrapper CLI")
     parser.add_argument("-q", "--query", help="Single query (non-interactive)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
@@ -97,7 +97,7 @@ def main() -> int:
 
     print()
     print(bold("=" * 50))
-    print(bold("  AgentCore Demo CLI"))
+    print(bold("  AgentCore Bootstrapper CLI"))
     print(bold("=" * 50))
     if GATEWAY_URL:
         print(dim("  Tools: Gateway MCP (21) + direct (1)"))
@@ -110,7 +110,7 @@ def main() -> int:
 
     while True:
         try:
-            user_input = input(f"{cyan('demo')}> ").strip()
+            user_input = input(f"{cyan('bootstrapper')}> ").strip()
         except (KeyboardInterrupt, EOFError):
             print(dim("\n  Bye."))
             return 0

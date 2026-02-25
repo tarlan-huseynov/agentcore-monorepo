@@ -253,7 +253,7 @@ def _show_logs(boto_session, log_group: str, minutes: int = 5) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="AgentCore Demo Remote CLI")
+    parser = argparse.ArgumentParser(description="AgentCore Bootstrapper Remote CLI")
     parser.add_argument(
         "--arn",
         default=os.getenv("AGENTCORE_RUNTIME_ARN"),
@@ -319,7 +319,7 @@ def main() -> int:
     # Interactive REPL
     print()
     print(bold("=" * 60))
-    print(bold("  AgentCore Demo Remote CLI"))
+    print(bold("  AgentCore Bootstrapper Remote CLI"))
     print(bold("=" * 60))
     print(f"  Runtime:  {dim(args.arn.split('/')[-1])}")
     print(f"  Session:  {dim(session_id[:8])}")
@@ -340,7 +340,7 @@ def main() -> int:
 
     while True:
         try:
-            user_input = input(f"{cyan('demo')}:{yellow('remote')}> ").strip()
+            user_input = input(f"{cyan('bootstrapper')}:{yellow('remote')}> ").strip()
         except (KeyboardInterrupt, EOFError):
             print(dim("\n  Bye."))
             return 0
