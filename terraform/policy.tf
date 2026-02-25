@@ -33,9 +33,17 @@ resource "null_resource" "policy_setup" {
     }
   }
 
+  # Re-run when the gateway or targets are recreated/replaced, since
+  # gateway updates strip the policy engine (not in TF schema).
+  lifecycle {
+    replace_triggered_by = [
+      aws_bedrockagentcore_gateway.main,
+      null_resource.gateway_targets,
+    ]
+  }
+
   depends_on = [
     aws_bedrockagentcore_gateway.main,
-    aws_bedrockagentcore_gateway_target.ccapi,
-    aws_bedrockagentcore_gateway_target.cost_explorer,
+    null_resource.gateway_targets,
   ]
 }

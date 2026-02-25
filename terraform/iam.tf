@@ -92,18 +92,31 @@ data "aws_iam_policy_document" "runtime_write_permissions" {
     }
   }
 
-  # Bedrock model invocation (Claude models)
+  # Bedrock model invocation (Claude models via Converse API)
   statement {
     sid    = "BedrockInvoke"
     effect = "Allow"
     actions = [
       "bedrock:InvokeModel",
       "bedrock:InvokeModelWithResponseStream",
+      "bedrock:Converse",
+      "bedrock:ConverseStream",
     ]
     resources = [
       "arn:aws:bedrock:*::foundation-model/anthropic.claude-*",
       "arn:aws:bedrock:*:${local.account_id}:inference-profile/${local.bedrock_region_prefix}.anthropic.claude-*",
     ]
+  }
+
+  # AWS Marketplace -- required for Bedrock model access (Claude 4.x+ models)
+  statement {
+    sid    = "MarketplaceModelAccess"
+    effect = "Allow"
+    actions = [
+      "aws-marketplace:ViewSubscriptions",
+      "aws-marketplace:Subscribe",
+    ]
+    resources = ["*"]
   }
 
   # S3 -- read deployment artifact

@@ -30,7 +30,12 @@ import os
 os.environ.setdefault("SECURITY_SCANNING", "enabled")
 os.environ.setdefault("DEFAULT_TAGS", "enabled")
 
+from awslabs.ccapi_mcp_server.context import Context  # noqa: E402
 from awslabs.ccapi_mcp_server.server import mcp  # noqa: E402
+
+# Initialize the Context singleton — required by tools that call Context.readonly_mode().
+# The upstream server.py normally does this in its CLI main() which we bypass.
+Context.initialize(readonly_mode=False)
 
 # AgentCore Runtime expects stateless HTTP on 0.0.0.0:8000/mcp.
 #

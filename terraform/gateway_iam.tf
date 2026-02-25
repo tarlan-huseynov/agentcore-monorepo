@@ -50,6 +50,46 @@ data "aws_iam_policy_document" "gateway_permissions" {
     ]
   }
 
+  # Policy Engine — evaluate Cedar policies at the Gateway.
+  # AuthorizeAction: evaluates a single tool call against Cedar policies.
+  # PartiallyAuthorizeActions: filters tools/list to only permitted tools.
+  statement {
+    sid    = "PolicyEngine"
+    effect = "Allow"
+    actions = [
+      "bedrock-agentcore:GetPolicyEngine",
+      "bedrock-agentcore:GetPolicy",
+      "bedrock-agentcore:IsAuthorized",
+      "bedrock-agentcore:AuthorizeAction",
+      "bedrock-agentcore:PartiallyAuthorizeActions",
+    ]
+    resources = ["*"]
+  }
+
+  # Outbound OAuth — required for Gateway to fetch Bearer tokens for target runtimes.
+  # The Gateway needs: workload identity access, OAuth2 token retrieval, and
+  # Secrets Manager access (credential provider stores client_secret there).
+  statement {
+    sid    = "OutboundOAuth"
+    effect = "Allow"
+    actions = [
+      "bedrock-agentcore:GetWorkloadAccessToken",
+      "bedrock-agentcore:GetResourceOauth2Token",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "SecretsManagerOAuth"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:bedrock-agentcore*",
+    ]
+  }
+
   # CloudWatch Logs for Gateway
   statement {
     sid    = "CloudWatchLogs"
@@ -120,6 +160,14 @@ data "aws_iam_policy_document" "mcp_ccapi_permissions" {
       "cloudcontrol:GetResourceRequestStatus",
       "cloudcontrol:ListResourceRequests",
     ]
+    resources = ["*"]
+  }
+
+  # STS — caller identity (required by get_aws_session_info, get_aws_account_info)
+  statement {
+    sid       = "STSCallerIdentity"
+    effect    = "Allow"
+    actions   = ["sts:GetCallerIdentity"]
     resources = ["*"]
   }
 
