@@ -46,11 +46,15 @@ resource "aws_bedrockagentcore_gateway" "main" {
 
 resource "null_resource" "gateway_targets" {
   triggers = {
-    # Re-run when runtimes or credential provider change
-    ccapi_arn    = aws_bedrockagentcore_agent_runtime.ccapi.agent_runtime_arn
-    cost_arn     = aws_bedrockagentcore_agent_runtime.cost_explorer.agent_runtime_arn
+    # Re-run when runtimes, credential provider, or MCP entry points change.
+    # Entry point changes may add/remove tools, requiring a target refresh for
+    # the Gateway to discover the new tool list.
+    ccapi_arn     = aws_bedrockagentcore_agent_runtime.ccapi.agent_runtime_arn
+    cost_arn      = aws_bedrockagentcore_agent_runtime.cost_explorer.agent_runtime_arn
     cred_provider = aws_bedrockagentcore_oauth2_credential_provider.gateway_m2m.credential_provider_arn
-    script_hash  = filesha256("${path.module}/../scripts/setup_targets.sh")
+    script_hash   = filesha256("${path.module}/../scripts/setup_targets.sh")
+    ccapi_code    = filesha256("${path.module}/../mcp_servers/ccapi_entrypoint.py")
+    cost_code     = filesha256("${path.module}/../mcp_servers/cost_entrypoint.py")
   }
 
   provisioner "local-exec" {

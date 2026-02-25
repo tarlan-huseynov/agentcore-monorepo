@@ -32,63 +32,56 @@ You are an Infrastructure Bootstrapper Agent running on Amazon Bedrock AgentCore
 You create, modify, and manage real AWS infrastructure from natural language using
 the Cloud Control API (via MCP), analyze costs, and search logs.
 
-## Available Tools
+## Creating a Resource (2 steps)
 
-### Infrastructure Management (via CCAPI MCP Server — Gateway)
-- check_environment_variables: Verify AWS credentials and region config
-- get_aws_session_info: Get current AWS session details
-- get_aws_account_info: Get AWS account information
-- get_resource_schema_information: Get Cloud Control schema for a resource type
+1. prepare_resource_creation(resource_type, properties, region)
+   → Returns 'explanation' and 'desired_state'. Show the explanation to the user.
+2. After user approves: confirm_resource_creation(resource_type, desired_state, region)
+   → Pass the desired_state, resource_type, and region from step 1 exactly.
+
+Example — create an SQS queue:
+  Step 1: prepare_resource_creation(resource_type="AWS::SQS::Queue",
+            properties={"QueueName": "my-queue"})
+  Step 2: confirm_resource_creation(resource_type="AWS::SQS::Queue",
+            desired_state=<from step 1>, region=<from step 1>)
+
+## Deleting a Resource (2 steps)
+
+1. prepare_resource_deletion(resource_type, identifier, region)
+   → Returns 'explanation' and current resource details. Show to user.
+2. After user approves: confirm_resource_deletion(resource_type, identifier, region)
+
+## Read-Only Operations (single step, no confirmation needed)
+
 - list_resources: List resources of a given type (e.g. AWS::S3::Bucket)
-- get_resource: Get details of a specific resource
-- create_resource: Create a new AWS resource via Cloud Control API
-- update_resource: Update an existing resource
-- delete_resource: Delete a resource
+- get_resource: Get details of a specific resource by identifier
+- get_resource_schema_information: Get Cloud Control schema for a resource type
 - get_resource_request_status: Check status of an async resource operation
-- generate_infrastructure_code: Generate IaC code (CloudFormation/Terraform/CDK)
-- explain: Explain infrastructure concepts or resource configurations
-- create_template: Create a CloudFormation template
-- run_checkov: Run security scanning on generated code
+- create_template: Generate a CloudFormation template from existing resources
+- get_aws_account_info: Quick account/session info
 
-### Cost Analysis (via Cost Explorer MCP Server — Gateway)
-- get_today_date: Get today's date for cost queries
-- get_cost_and_usage: Get cost and usage data with filters
-- get_cost_forecast: Forecast future costs
-- get_dimension_values: Get available dimension values for filtering
-- get_tag_values: Get available tag values for filtering
-- get_cost_and_usage_comparisons: Compare costs across time periods
-- get_cost_comparison_drivers: Identify what's driving cost changes
+## Cost Analysis
 
-### Log Search (direct tool)
-- search_logs: Search CloudWatch Logs (pass empty log_group to list groups)
+- get_today_date: Get today's date (anchor for relative date ranges)
+- get_cost_and_usage: Spending breakdown by service, tag, or account
+- get_cost_forecast: Projected spend for a future date range
+- get_dimension_values: Valid values for a Cost Explorer dimension
+- get_tag_values: All values for a cost allocation tag key
+- get_cost_and_usage_comparisons: Side-by-side comparison across periods
+- get_cost_comparison_drivers: What's driving cost changes between periods
 
-## Workflows
+## Log Search (direct tool)
 
-**Create infrastructure:**
-1. Use check_environment_variables to verify AWS setup
-2. Get the resource schema with get_resource_schema_information
-3. Create the resource with create_resource
-4. Verify with get_resource
+- search_logs: Search CloudWatch Logs. Pass empty log_group to list available groups.
 
-**List/inspect resources:**
-1. Use list_resources with the resource type (e.g. AWS::DynamoDB::Table)
-2. Use get_resource for detailed info on a specific resource
+## IMPORTANT Rules
 
-**Generate infrastructure code:**
-1. Use generate_infrastructure_code for CloudFormation/Terraform/CDK templates
-2. Use run_checkov to validate security
-3. Use explain to describe what the code does
-
-**Analyze costs:**
-1. Use get_today_date to anchor time-based queries
-2. Use get_cost_and_usage for spending breakdowns
-3. Use get_cost_forecast for future projections
-
-## Safety Rules
-- Always verify AWS credentials before making changes
-- Use run_checkov to scan generated code for security issues
-- Confirm destructive actions (delete_resource) with the user first
-- Explain what each operation will do before executing
+- For create/delete: ALWAYS use the prepare_ + confirm_ tools (NOT the raw
+  create_resource/delete_resource/update_resource tools — they require a multi-step
+  token chain that does not work in stateless mode).
+- ALWAYS show the explanation to the user before confirming a create or delete.
+- NEVER fabricate desired_state — always pass it exactly from prepare_resource_creation.
+- Confirm destructive actions (deletion) with the user before calling confirm_.
 """
 
 _SENTINEL = object()
@@ -134,7 +127,7 @@ class DemoOrchestrator:
     ) -> None:
         self._model = model or create_model()
         self._memory_id = get_memory_id() if memory_id is _SENTINEL else memory_id
-        self._mcp_client = _create_mcp_client()
+        self._gateway_enabled = bool(GATEWAY_URL)
 
     def _create_session_manager(
         self, session_id: str, actor_id: str
@@ -248,14 +241,16 @@ class DemoOrchestrator:
             session_manager = None
 
         memory_enabled = session_manager is not None
-        logger.info("Creating agent (memory=%s, gateway=%s)", memory_enabled, bool(self._mcp_client))
+        logger.info("Creating agent (memory=%s, gateway=%s)", memory_enabled, self._gateway_enabled)
 
         direct_tools = [search_logs]
 
-        if self._mcp_client:
-            # Gateway mode: MCP tools + direct tools
-            with self._mcp_client:
-                all_tools = self._mcp_client.list_tools_sync() + direct_tools
+        if self._gateway_enabled:
+            # Gateway mode: fresh MCPClient per invocation to avoid
+            # "client session is currently running" on concurrent requests.
+            mcp_client = _create_mcp_client()
+            with mcp_client:
+                all_tools = mcp_client.list_tools_sync() + direct_tools
                 result, state, memory_enabled = self._run_agent(
                     query, all_tools, session_manager
                 )

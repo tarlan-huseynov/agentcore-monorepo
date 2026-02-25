@@ -146,152 +146,17 @@ resource "aws_iam_role" "mcp_ccapi" {
   assume_role_policy = data.aws_iam_policy_document.mcp_ccapi_assume_role.json
 }
 
-data "aws_iam_policy_document" "mcp_ccapi_permissions" {
-  # Cloud Control API — full CRUDL
-  statement {
-    sid    = "CloudControlAPI"
-    effect = "Allow"
-    actions = [
-      "cloudcontrol:CreateResource",
-      "cloudcontrol:GetResource",
-      "cloudcontrol:UpdateResource",
-      "cloudcontrol:DeleteResource",
-      "cloudcontrol:ListResources",
-      "cloudcontrol:GetResourceRequestStatus",
-      "cloudcontrol:ListResourceRequests",
-    ]
-    resources = ["*"]
-  }
+# PowerUserAccess covers all services except IAM/Organizations.
+# Replaces per-service action lists with a single managed policy.
+# Safety guardrails come from Cedar policy at the Gateway level.
+resource "aws_iam_role_policy_attachment" "mcp_ccapi_power_user" {
+  role       = aws_iam_role.mcp_ccapi.name
+  policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
+}
 
-  # STS — caller identity (required by get_aws_session_info, get_aws_account_info)
-  statement {
-    sid       = "STSCallerIdentity"
-    effect    = "Allow"
-    actions   = ["sts:GetCallerIdentity"]
-    resources = ["*"]
-  }
-
-  # CloudFormation — IaC generator + schema
-  statement {
-    sid    = "CloudFormationIaC"
-    effect = "Allow"
-    actions = [
-      "cloudformation:CreateGeneratedTemplate",
-      "cloudformation:DescribeGeneratedTemplate",
-      "cloudformation:GetGeneratedTemplate",
-      "cloudformation:ListGeneratedTemplates",
-      "cloudformation:DeleteGeneratedTemplate",
-      "cloudformation:DescribeType",
-      "cloudformation:ListTypes",
-    ]
-    resources = ["*"]
-  }
-
-  # Service permissions for Cloud Control managed resources
-  statement {
-    sid    = "ServicePermissions"
-    effect = "Allow"
-    actions = [
-      # DynamoDB
-      "dynamodb:CreateTable",
-      "dynamodb:DeleteTable",
-      "dynamodb:UpdateTable",
-      "dynamodb:DescribeTable",
-      "dynamodb:ListTables",
-      "dynamodb:TagResource",
-      "dynamodb:UntagResource",
-      "dynamodb:UpdateTimeToLive",
-      "dynamodb:DescribeTimeToLive",
-      # Lambda
-      "lambda:CreateFunction",
-      "lambda:DeleteFunction",
-      "lambda:UpdateFunctionCode",
-      "lambda:UpdateFunctionConfiguration",
-      "lambda:AddPermission",
-      "lambda:RemovePermission",
-      "lambda:GetFunction",
-      "lambda:GetFunctionConfiguration",
-      "lambda:ListFunctions",
-      "lambda:TagResource",
-      "lambda:PutFunctionEventInvokeConfig",
-      "lambda:CreateEventSourceMapping",
-      "lambda:DeleteEventSourceMapping",
-      # API Gateway
-      "apigateway:POST",
-      "apigateway:GET",
-      "apigateway:PUT",
-      "apigateway:DELETE",
-      "apigateway:PATCH",
-      # S3
-      "s3:CreateBucket",
-      "s3:DeleteBucket",
-      "s3:ListAllMyBuckets",
-      "s3:ListBucket",
-      "s3:GetBucketLocation",
-      "s3:PutBucketPolicy",
-      "s3:DeleteBucketPolicy",
-      "s3:PutBucketTagging",
-      "s3:PutEncryptionConfiguration",
-      "s3:PutBucketVersioning",
-      "s3:PutBucketPublicAccessBlock",
-      # SQS
-      "sqs:CreateQueue",
-      "sqs:DeleteQueue",
-      "sqs:SetQueueAttributes",
-      "sqs:GetQueueAttributes",
-      "sqs:ListQueues",
-      "sqs:TagQueue",
-      # SNS
-      "sns:CreateTopic",
-      "sns:DeleteTopic",
-      "sns:Subscribe",
-      "sns:Unsubscribe",
-      "sns:SetTopicAttributes",
-      "sns:ListTopics",
-      "sns:TagResource",
-      # CloudWatch
-      "cloudwatch:PutMetricAlarm",
-      "cloudwatch:DeleteAlarms",
-      "cloudwatch:PutDashboard",
-      "cloudwatch:DeleteDashboards",
-      "cloudwatch:DescribeAlarms",
-      # CloudWatch Logs (for Lambda log groups)
-      "logs:CreateLogGroup",
-      "logs:DeleteLogGroup",
-      "logs:PutRetentionPolicy",
-      "logs:DescribeLogGroups",
-      "logs:TagResource",
-      # EC2 (security groups, VPC basics)
-      "ec2:CreateSecurityGroup",
-      "ec2:DeleteSecurityGroup",
-      "ec2:AuthorizeSecurityGroupIngress",
-      "ec2:AuthorizeSecurityGroupEgress",
-      "ec2:RevokeSecurityGroupIngress",
-      "ec2:RevokeSecurityGroupEgress",
-      "ec2:DescribeSecurityGroups",
-      "ec2:DescribeInstances",
-      "ec2:DescribeVpcs",
-      "ec2:DescribeSubnets",
-      "ec2:CreateTags",
-      # Step Functions
-      "states:CreateStateMachine",
-      "states:DeleteStateMachine",
-      "states:UpdateStateMachine",
-      "states:DescribeStateMachine",
-      "states:ListStateMachines",
-      "states:TagResource",
-      # EventBridge
-      "events:PutRule",
-      "events:DeleteRule",
-      "events:PutTargets",
-      "events:RemoveTargets",
-      "events:ListRules",
-      "events:TagResource",
-    ]
-    resources = ["*"]
-  }
-
-  # IAM for created roles (scoped to agentcore-cf-* prefix)
+# Scoped IAM — only for roles the agent creates (agentcore-cf-* prefix).
+# PowerUserAccess excludes most IAM actions.
+data "aws_iam_policy_document" "mcp_ccapi_iam" {
   statement {
     sid    = "IAMForCreatedRoles"
     effect = "Allow"
@@ -313,26 +178,12 @@ data "aws_iam_policy_document" "mcp_ccapi_permissions" {
       "arn:aws:iam::${local.account_id}:role/agentcore-cf-*",
     ]
   }
-
-  # CloudWatch Logs — runtime logging
-  statement {
-    sid    = "RuntimeLogs"
-    effect = "Allow"
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-    ]
-    resources = [
-      "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
-      "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*",
-    ]
-  }
 }
 
-resource "aws_iam_role_policy" "mcp_ccapi" {
-  name   = "${local.name}-mcp-ccapi-policy"
+resource "aws_iam_role_policy" "mcp_ccapi_iam" {
+  name   = "${local.name}-mcp-ccapi-iam"
   role   = aws_iam_role.mcp_ccapi.id
-  policy = data.aws_iam_policy_document.mcp_ccapi_permissions.json
+  policy = data.aws_iam_policy_document.mcp_ccapi_iam.json
 }
 
 # ---------------------------------------------------------------------------

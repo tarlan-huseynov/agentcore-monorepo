@@ -53,7 +53,8 @@ when {
      context.input.resourceType == "AWS::CloudWatch::Alarm" ||
      context.input.resourceType == "AWS::ApiGateway::RestApi" ||
      context.input.resourceType == "AWS::StepFunctions::StateMachine" ||
-     context.input.resourceType == "AWS::Logs::LogGroup")
+     context.input.resourceType == "AWS::Logs::LogGroup" ||
+     context.input.resourceType == "AWS::EC2::Instance")
 };
 
 // ---------------------------------------------------------------------------
@@ -71,7 +72,8 @@ when {
      context.input.resourceType == "AWS::SQS::Queue" ||
      context.input.resourceType == "AWS::SNS::Topic" ||
      context.input.resourceType == "AWS::CloudWatch::Alarm" ||
-     context.input.resourceType == "AWS::Logs::LogGroup")
+     context.input.resourceType == "AWS::Logs::LogGroup" ||
+     context.input.resourceType == "AWS::EC2::Instance")
 };
 
 // ---------------------------------------------------------------------------

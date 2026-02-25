@@ -43,9 +43,12 @@ package_mcp_server() {
         --only-binary=:all: \
         "$pip_pkg"
 
-    # Copy entry point
+    # Copy entry point and shared modules
     echo "  Copying entry point: $entrypoint"
     cp "$PROJECT_ROOT/mcp_servers/$entrypoint" "$build_dir/"
+    for shared in "$PROJECT_ROOT/mcp_servers/_"*.py; do
+        [ -f "$shared" ] && cp "$shared" "$build_dir/"
+    done
 
     # Apply patches: copy any override files from mcp_servers/patches/<name>/
     # over the pip-installed versions to fix AgentCore compatibility issues.

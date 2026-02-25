@@ -45,7 +45,7 @@ resource "null_resource" "build" {
 
 resource "null_resource" "build_mcp" {
   triggers = {
-    ccapi_hash     = filesha256("${path.module}/../mcp_servers/ccapi_entrypoint.py")
+    ccapi_hash = filesha256("${path.module}/../mcp_servers/ccapi_entrypoint.py")
     cost_hash      = filesha256("${path.module}/../mcp_servers/cost_entrypoint.py")
     package_script = filesha256("${path.module}/../scripts/package_mcp.sh")
     # Re-build CCAPI package when any patch file changes (patches override pip-installed files)

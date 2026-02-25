@@ -60,7 +60,8 @@ resource "aws_bedrockagentcore_agent_runtime" "ccapi" {
   }
 
   depends_on = [
-    aws_iam_role_policy.mcp_ccapi,
+    aws_iam_role_policy_attachment.mcp_ccapi_power_user,
+    aws_iam_role_policy.mcp_ccapi_iam,
     aws_s3_object.ccapi_package,
   ]
 }
