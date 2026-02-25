@@ -13,6 +13,7 @@ Architecture:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 from typing import Any
@@ -85,6 +86,11 @@ Example — create an SQS queue:
 """
 
 _SENTINEL = object()
+
+# Stable agent ID so the session manager can find previous conversations.
+# Without this, each fresh Agent() gets a random UUID and the session manager
+# treats every invocation as a brand-new agent (no history restored).
+_AGENT_ID = "bootstrapper"
 
 
 def _sanitize_memory_id(value: str) -> str:
@@ -176,9 +182,14 @@ class DemoOrchestrator:
             actor_id=safe_actor,
             retrieval_config=retrieval_config,
         )
+
+        boto_session = get_aws_session()
+        region = os.getenv("AWS_REGION") or boto_session.region_name
+
         return AgentCoreMemorySessionManager(
             agentcore_memory_config=config,
-            boto_session=get_aws_session(),
+            region_name=region,
+            boto_session=boto_session,
         )
 
     def _run_agent(
@@ -186,7 +197,7 @@ class DemoOrchestrator:
         query: str,
         tools: list,
         session_manager: Any | None,
-    ) -> tuple[Any, dict[str, Any], bool]:
+    ) -> tuple[Any, dict[str, Any], bool, int]:
         """Run the Strands agent loop, retrying without memory on corruption."""
         memory_enabled = session_manager is not None
         state: dict[str, Any] = {"tool_calls": []}
@@ -197,6 +208,14 @@ class DemoOrchestrator:
             system_prompt=SYSTEM_PROMPT,
             session_manager=session_manager,
             callback_handler=None,
+            agent_id=_AGENT_ID,
+        )
+
+        restored_messages = len(agent.messages)
+        logger.info(
+            "Agent created: agent_id=%s, restored_messages=%d",
+            _AGENT_ID,
+            restored_messages,
         )
 
         try:
@@ -211,14 +230,22 @@ class DemoOrchestrator:
                     tools=tools,
                     system_prompt=SYSTEM_PROMPT,
                     callback_handler=None,
+                    agent_id=_AGENT_ID,
                 )
                 state = {"tool_calls": []}
                 memory_enabled = False
                 result = agent(query, invocation_state=state)
             else:
                 raise
+        finally:
+            # Flush any buffered messages to AgentCore Memory.
+            if session_manager is not None and hasattr(session_manager, "close"):
+                try:
+                    session_manager.close()
+                except Exception as close_exc:
+                    logger.warning("Session manager close failed: %s", close_exc)
 
-        return result, state, memory_enabled
+        return result, state, memory_enabled, restored_messages
 
     def ask(
         self,
@@ -251,12 +278,12 @@ class DemoOrchestrator:
             mcp_client = _create_mcp_client()
             with mcp_client:
                 all_tools = mcp_client.list_tools_sync() + direct_tools
-                result, state, memory_enabled = self._run_agent(
+                result, state, memory_enabled, restored = self._run_agent(
                     query, all_tools, session_manager
                 )
         else:
             # Fallback: direct tools only (no Gateway)
-            result, state, memory_enabled = self._run_agent(
+            result, state, memory_enabled, restored = self._run_agent(
                 query, direct_tools, session_manager
             )
 
@@ -266,6 +293,7 @@ class DemoOrchestrator:
             "tool_calls": state.get("tool_calls", []),
             "memory": {
                 "enabled": memory_enabled,
+                "restored_messages": restored,
                 "session_id": session_id,
                 "actor_id": actor_id,
             },

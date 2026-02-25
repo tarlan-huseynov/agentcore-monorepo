@@ -33,6 +33,7 @@ resource "aws_bedrockagentcore_agent_runtime" "main" {
   }
 
   environment_variables = {
+    AWS_REGION                       = local.region
     LOG_LEVEL                        = var.log_level
     BEDROCK_MODEL_ID                 = local.bedrock_model_id
     MEMORY_ENABLED                   = "true"

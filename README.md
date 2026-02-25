@@ -170,7 +170,7 @@ uv run python cli.py
 ```
 
 ```
-demo> What CloudWatch log groups are available?
+bootstrapper> What CloudWatch log groups are available?
 
 --- Answer ---
 Available log groups in eu-central-1:
@@ -182,7 +182,7 @@ Available log groups in eu-central-1:
     search_logs({"log_group": "", "region": "eu-central-1"})
   Duration: 1.8s | Stop: end_turn
 
-demo> Search the agent's logs for errors in the last 30 minutes
+bootstrapper> Search the agent's logs for errors in the last 30 minutes
 
 --- Answer ---
 Found 3 entries matching "ERROR" ...
@@ -226,7 +226,7 @@ uv run python cli_remote.py
 ```
 
 ```
-demo:remote> List my S3 buckets
+bootstrapper:remote> List my S3 buckets
   Invoking runtime...
 
 --- Answer ---
@@ -235,16 +235,21 @@ Here are the S3 buckets in your account:
   2. my-other-bucket
   ...
 
+  Memory: on | restored 2 msgs
   Duration: 12.3s | Stop: end_turn
-
-demo:remote> What did I spend last 7 days by service?
-
---- Answer ---
-AWS costs for the last 7 days:
-  Amazon Bedrock: $4.21
-  Amazon S3: $0.03
-  ...
 ```
+
+**Session & Memory:** Each REPL launch generates a random session ID, so conversations start fresh by default. To resume a previous conversation across launches, pass a fixed `--session-id`:
+
+```bash
+# First launch — starts a new conversation
+uv run python cli_remote.py --session-id "my-project"
+
+# Later launch — resumes the same conversation (memory restores history)
+uv run python cli_remote.py --session-id "my-project"
+```
+
+Within a single REPL session, memory persists automatically — no flag needed. Use `:new` to reset mid-session.
 
 Built-in REPL commands:
 
@@ -252,6 +257,7 @@ Built-in REPL commands:
 |---------|-------------|
 | `:new` | Start a new session (fresh memory) |
 | `:memory` | Show memory/session details |
+| `:session` | Show current session ID |
 | `:logs [min]` | Show recent CloudWatch runtime logs |
 | `:debug` | Toggle debug output (raw API response) |
 | `:quit` / `:q` | Exit |
@@ -260,6 +266,8 @@ Built-in REPL commands:
 
 ```bash
 uv run python cli_remote.py -q "List my S3 buckets"
+# With a persistent session:
+uv run python cli_remote.py -q "List my S3 buckets" --session-id "my-project"
 ```
 
 **Raw AWS CLI** — invoke the runtime directly without the CLI wrapper:
