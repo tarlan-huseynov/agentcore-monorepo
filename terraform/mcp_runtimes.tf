@@ -106,7 +106,9 @@ resource "aws_bedrockagentcore_agent_runtime" "cost_explorer" {
   }
 
   environment_variables = {
-    AWS_REGION        = local.region
+    # Cost Explorer API is global — only available via us-east-1 endpoint.
+    # Using any other region causes "internal error" from boto3 CE client.
+    AWS_REGION        = "us-east-1"
     FASTMCP_LOG_LEVEL = var.log_level
     _CODE_VERSION     = null_resource.build_mcp.triggers.cost_hash
   }
