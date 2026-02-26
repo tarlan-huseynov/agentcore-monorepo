@@ -32,4 +32,5 @@ terraform/.policy_outputs/
 .DS_Store
 
 # Claude
+CLAUDE.md
 .claude/
