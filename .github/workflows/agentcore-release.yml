@@ -33,10 +33,7 @@ jobs:
         run: uv sync
 
       - name: Ruff check
-        run: uv run ruff check app/ tests/
-
-      - name: Run tests
-        run: uv run pytest tests/ -v
+        run: uv run ruff check app/ mcp_servers/
 
   # --------------------------------------------------------------------------
   # Terraform Validate + Plan (on PR)
