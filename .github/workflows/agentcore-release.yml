@@ -81,16 +81,6 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: tflint --recursive --format compact 2>&1 | tee /tmp/tflint.txt
 
-      - name: Read TFLint output
-        if: always() && github.event_name == 'pull_request'
-        id: tflint_output
-        run: |
-          {
-            echo "content<<GITHUB_OUTPUT_EOF"
-            cat /tmp/tflint.txt 2>/dev/null || echo "No issues found."
-            echo "GITHUB_OUTPUT_EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Comment TFLint on PR
         if: always() && github.event_name == 'pull_request'
         uses: awsbaku/github-actions/actions/upsert-pr-comment@main
@@ -98,7 +88,7 @@ jobs:
           marker: agentcore-tflint
           title: TFLint
           status: ${{ steps.tflint.outcome }}
-          body: ${{ steps.tflint_output.outputs.content }}
+          file: /tmp/tflint.txt
 
       - name: Fail if TFLint failed
         if: steps.tflint.outcome == 'failure'
@@ -126,16 +116,6 @@ jobs:
           trivyignores: .trivyignore
           output: trivy_output.txt
 
-      - name: Read Trivy output
-        if: always() && github.event_name == 'pull_request'
-        id: trivy_output
-        run: |
-          {
-            echo "content<<GITHUB_OUTPUT_EOF"
-            cat trivy_output.txt 2>/dev/null || echo "No vulnerabilities found."
-            echo "GITHUB_OUTPUT_EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Comment Trivy on PR
         if: always() && github.event_name == 'pull_request'
         uses: awsbaku/github-actions/actions/upsert-pr-comment@main
@@ -143,7 +123,8 @@ jobs:
           marker: agentcore-trivy
           title: Trivy Security Scan
           status: ${{ steps.trivy.outcome }}
-          body: ${{ steps.trivy_output.outputs.content }}
+          file: trivy_output.txt
+          fallback: No vulnerabilities found.
 
       - name: Fail if Trivy failed
         if: steps.trivy.outcome == 'failure'
@@ -189,16 +170,6 @@ jobs:
           set -o pipefail
           terraform plan -no-color -out=tfplan 2>&1 | tee /tmp/plan.txt
 
-      - name: Read Plan output
-        if: always()
-        id: plan_output
-        run: |
-          {
-            echo "content<<GITHUB_OUTPUT_EOF"
-            cat /tmp/plan.txt 2>/dev/null || echo "Plan not available."
-            echo "GITHUB_OUTPUT_EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Comment plan on PR
         if: always()
         uses: awsbaku/github-actions/actions/upsert-pr-comment@main
@@ -207,7 +178,7 @@ jobs:
           title: Terraform Plan
           status: ${{ steps.plan.outcome }}
           format: hcl
-          body: ${{ steps.plan_output.outputs.content }}
+          file: /tmp/plan.txt
 
       - name: Fail if plan failed
         if: steps.plan.outcome == 'failure'
