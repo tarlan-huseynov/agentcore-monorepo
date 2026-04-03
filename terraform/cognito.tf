@@ -78,7 +78,6 @@ resource "null_resource" "oauth2_credential_provider" {
 
       if [ "$EXISTING_ARN" != "None" ] && [ -n "$EXISTING_ARN" ]; then
         echo "OAuth2 credential provider already exists: $EXISTING_ARN"
-        echo "$EXISTING_ARN" > ${path.module}/.oauth2_provider_arn
         exit 0
       fi
 
@@ -98,7 +97,6 @@ resource "null_resource" "oauth2_credential_provider" {
 
       ARN=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['credentialProviderArn'])")
       echo "Created: $ARN"
-      echo "$ARN" > ${path.module}/.oauth2_provider_arn
     EOT
   }
 
