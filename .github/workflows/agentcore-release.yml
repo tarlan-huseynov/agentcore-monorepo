@@ -172,7 +172,7 @@ jobs:
   # Terraform Plan (on PR)
   # --------------------------------------------------------------------------
   plan:
-    name: Terraform Plan
+    name: Plan [Terraform]
     if: github.event_name == 'pull_request'
     needs: [validate, security]
     runs-on: ubuntu-latest
@@ -245,7 +245,7 @@ jobs:
   # Terraform Apply (on merge to main)
   # --------------------------------------------------------------------------
   deploy:
-    name: Terraform Apply
+    name: Apply [Terraform]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [validate, security]
     runs-on: ubuntu-latest
