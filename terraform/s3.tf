@@ -23,6 +23,8 @@ resource "aws_s3_bucket_public_access_block" "code" {
 # ---------------------------------------------------------------------------
 
 resource "null_resource" "build" {
+  #checkov:skip=CKV2_AWS_6:null_resource is not a Lambda — false positive
+  #checkov:skip=CKV_AWS_290:local-exec runs scripts/package.sh for ARM64 cross-compile packaging
   triggers = {
     # Re-build whenever any Python source file changes
     source_hash = sha256(join("", [
@@ -44,8 +46,10 @@ resource "null_resource" "build" {
 # ---------------------------------------------------------------------------
 
 resource "null_resource" "build_mcp" {
+  #checkov:skip=CKV2_AWS_6:null_resource is not a Lambda — false positive
+  #checkov:skip=CKV_AWS_290:local-exec runs scripts/package_mcp.sh for ARM64 cross-compile packaging
   triggers = {
-    ccapi_hash = filesha256("${path.module}/../mcp_servers/ccapi_entrypoint.py")
+    ccapi_hash     = filesha256("${path.module}/../mcp_servers/ccapi_entrypoint.py")
     cost_hash      = filesha256("${path.module}/../mcp_servers/cost_entrypoint.py")
     package_script = filesha256("${path.module}/../scripts/package_mcp.sh")
     # Re-build CCAPI package when any patch file changes (patches override pip-installed files)
@@ -68,7 +72,7 @@ resource "null_resource" "build_mcp" {
 resource "aws_s3_object" "deployment_package" {
   bucket      = aws_s3_bucket.code.id
   key         = "${var.project_name}/deployment_package.zip"
-  source      = "${path.module}/../deployment_package.zip"
+  source      = "${path.module}/../.artifacts/deployment_package.zip"
   source_hash = null_resource.build.triggers.source_hash
 
   depends_on = [null_resource.build]
@@ -77,7 +81,7 @@ resource "aws_s3_object" "deployment_package" {
 resource "aws_s3_object" "ccapi_package" {
   bucket      = aws_s3_bucket.code.id
   key         = "${var.project_name}/mcp_ccapi_package.zip"
-  source      = "${path.module}/../mcp_ccapi_package.zip"
+  source      = "${path.module}/../.artifacts/mcp_ccapi_package.zip"
   source_hash = null_resource.build_mcp.triggers.ccapi_hash
 
   depends_on = [null_resource.build_mcp]
@@ -86,7 +90,7 @@ resource "aws_s3_object" "ccapi_package" {
 resource "aws_s3_object" "cost_package" {
   bucket      = aws_s3_bucket.code.id
   key         = "${var.project_name}/mcp_cost_package.zip"
-  source      = "${path.module}/../mcp_cost_package.zip"
+  source      = "${path.module}/../.artifacts/mcp_cost_package.zip"
   source_hash = null_resource.build_mcp.triggers.cost_hash
 
   depends_on = [null_resource.build_mcp]

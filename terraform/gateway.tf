@@ -45,13 +45,16 @@ resource "aws_bedrockagentcore_gateway" "main" {
 # ---------------------------------------------------------------------------
 
 resource "null_resource" "gateway_targets" {
+  #checkov:skip=CKV2_AWS_6:null_resource is not a Lambda — false positive from resource type pattern matching
+  #checkov:skip=CKV_AWS_290:local-exec is an intentional CLI workaround; TF provider lacks grantType support for Gateway OAuth targets
+
   triggers = {
     # Re-run when runtimes, credential provider, or MCP entry points change.
     # Entry point changes may add/remove tools, requiring a target refresh for
     # the Gateway to discover the new tool list.
     ccapi_arn     = aws_bedrockagentcore_agent_runtime.ccapi.agent_runtime_arn
     cost_arn      = aws_bedrockagentcore_agent_runtime.cost_explorer.agent_runtime_arn
-    cred_provider = aws_bedrockagentcore_oauth2_credential_provider.gateway_m2m.credential_provider_arn
+    cred_provider = data.external.oauth2_provider_arn.result["arn"]
     script_hash   = filesha256("${path.module}/../scripts/setup_targets.sh")
     ccapi_code    = filesha256("${path.module}/../mcp_servers/ccapi_entrypoint.py")
     cost_code     = filesha256("${path.module}/../mcp_servers/cost_entrypoint.py")
@@ -65,7 +68,7 @@ resource "null_resource" "gateway_targets" {
       GATEWAY_ID              = aws_bedrockagentcore_gateway.main.gateway_id
       CCAPI_RUNTIME_ARN       = aws_bedrockagentcore_agent_runtime.ccapi.agent_runtime_arn
       COST_RUNTIME_ARN        = aws_bedrockagentcore_agent_runtime.cost_explorer.agent_runtime_arn
-      CREDENTIAL_PROVIDER_ARN = aws_bedrockagentcore_oauth2_credential_provider.gateway_m2m.credential_provider_arn
+      CREDENTIAL_PROVIDER_ARN = data.external.oauth2_provider_arn.result["arn"]
       SCOPES                  = "mcp/invoke"
       REGION                  = local.region
     }
@@ -76,6 +79,6 @@ resource "null_resource" "gateway_targets" {
     aws_iam_role_policy.gateway,
     aws_bedrockagentcore_agent_runtime.ccapi,
     aws_bedrockagentcore_agent_runtime.cost_explorer,
-    aws_bedrockagentcore_oauth2_credential_provider.gateway_m2m,
+    null_resource.oauth2_credential_provider,
   ]
 }

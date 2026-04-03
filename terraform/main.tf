@@ -14,7 +14,15 @@ terraform {
     # Memory resources (aws_bedrockagentcore_memory*) require >= 6.18.0
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 6.32"
+      version = "~> 6.39"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.0"
     }
   }
 }

@@ -1,0 +1,274 @@
+name: AgentCore Pipeline
+run-name: 'AgentCore Release - bootstrapper-agent by @${{ github.actor }}'
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  security-events: write
+
+concurrency:
+  group: agentcore-terraform
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-central-1
+  TF_DIR: terraform
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Lint (Python + Terraform format)
+  # --------------------------------------------------------------------------
+  lint:
+    name: Lint [Codebase]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Ruff check
+        run: uv run ruff check app/ mcp_servers/
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform format check
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check -recursive
+
+  # --------------------------------------------------------------------------
+  # Terraform Validate + TFLint
+  # --------------------------------------------------------------------------
+  validate:
+    name: Validate & Lint [Terraform]
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v6
+
+      - name: TFLint Init
+        working-directory: ${{ env.TF_DIR }}
+        run: tflint --init
+
+      - name: TFLint
+        id: tflint
+        working-directory: ${{ env.TF_DIR }}
+        run: tflint --recursive --format compact 2>&1 | tee tflint_output.txt
+
+      - name: Comment TFLint on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- agentcore-tflint -->';
+            const file = '${{ env.TF_DIR }}/tflint_output.txt';
+            if (!fs.existsSync(file)) return;
+            const output = fs.readFileSync(file, 'utf8').trim();
+            const icon = '${{ steps.tflint.outcome }}' === 'success' ? '✅' : '❌';
+            const summary = output.length === 0 ? 'No issues found.' : output;
+
+            const body = `${marker}\n### ${icon} TFLint\n\n<details>\n<summary>Show results</summary>\n\n\`\`\`\n${summary}\n\`\`\`\n\n</details>`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body: body
+              });
+            }
+
+  # --------------------------------------------------------------------------
+  # Security Scan (Trivy)
+  # --------------------------------------------------------------------------
+  security:
+    name: Security Scan [Terraform]
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Trivy IaC scan
+        id: trivy
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: config
+          scan-ref: ${{ env.TF_DIR }}
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          trivyignores: .trivyignore
+          output: trivy_output.txt
+
+      - name: Comment Trivy on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- agentcore-trivy -->';
+            const file = 'trivy_output.txt';
+            if (!fs.existsSync(file)) return;
+            const output = fs.readFileSync(file, 'utf8').trim();
+            const icon = '${{ steps.trivy.outcome }}' === 'success' ? '✅' : '❌';
+            const summary = output.length === 0 ? 'No vulnerabilities found.' : output;
+            const truncated = summary.length > 60000
+              ? summary.substring(0, 60000) + '\n\n... truncated ...'
+              : summary;
+
+            const body = `${marker}\n### ${icon} Trivy Security Scan\n\n<details>\n<summary>Show results</summary>\n\n\`\`\`\n${truncated}\n\`\`\`\n\n</details>`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body: body
+              });
+            }
+
+  # --------------------------------------------------------------------------
+  # Terraform Plan (on PR)
+  # --------------------------------------------------------------------------
+  plan:
+    name: Plan [Terraform]
+    if: github.event_name == 'pull_request'
+    needs: [validate, security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Build packages
+        run: |
+          bash scripts/package.sh
+          bash scripts/package_mcp.sh
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -o pipefail
+          terraform plan -no-color -out=tfplan 2>&1 | tee plan_output.txt
+
+      - name: Comment plan on PR
+        if: always() && steps.plan.outcome != 'skipped'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- agentcore-plan -->';
+            const planFile = '${{ env.TF_DIR }}/plan_output.txt';
+            if (!fs.existsSync(planFile)) return;
+            const plan = fs.readFileSync(planFile, 'utf8');
+            const truncated = plan.length > 60000
+              ? plan.substring(0, 60000) + '\n\n... truncated ...'
+              : plan;
+            const icon = '${{ steps.plan.outcome }}' === 'success' ? '✅' : '❌';
+
+            const body = `${marker}\n### ${icon} Terraform Plan\n\n<details>\n<summary>Show plan output</summary>\n\n\`\`\`hcl\n${truncated}\n\`\`\`\n\n</details>`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body: body
+              });
+            }
+
+  # --------------------------------------------------------------------------
+  # Terraform Apply (on merge to main)
+  # --------------------------------------------------------------------------
+  deploy:
+    name: Apply [Terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [validate, security]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -auto-approve
