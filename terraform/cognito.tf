@@ -35,9 +35,9 @@ resource "aws_cognito_user_pool_client" "m2m" {
   name         = "${local.name}-gateway-m2m"
   user_pool_id = aws_cognito_user_pool.gateway_outbound.id
 
-  generate_secret              = true
-  allowed_oauth_flows          = ["client_credentials"]
-  allowed_oauth_scopes         = aws_cognito_resource_server.mcp.scope_identifiers
+  generate_secret                      = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes                 = aws_cognito_resource_server.mcp.scope_identifiers
   allowed_oauth_flows_user_pool_client = true
 
   explicit_auth_flows = []
@@ -60,15 +60,15 @@ locals {
 
 resource "null_resource" "oauth2_credential_provider" {
   triggers = {
-    name           = local.oauth2_provider_name
-    client_id      = aws_cognito_user_pool_client.m2m.id
-    client_secret  = aws_cognito_user_pool_client.m2m.client_secret
-    discovery_url  = "https://cognito-idp.${local.region}.amazonaws.com/${aws_cognito_user_pool.gateway_outbound.id}/.well-known/openid-configuration"
+    name          = local.oauth2_provider_name
+    client_id     = aws_cognito_user_pool_client.m2m.id
+    client_secret = aws_cognito_user_pool_client.m2m.client_secret
+    discovery_url = "https://cognito-idp.${local.region}.amazonaws.com/${aws_cognito_user_pool.gateway_outbound.id}/.well-known/openid-configuration"
   }
 
   provisioner "local-exec" {
     interpreter = ["bash", "-c"]
-    command = <<-EOT
+    command     = <<-EOT
       set -euo pipefail
 
       # Check if provider already exists
