@@ -26,7 +26,7 @@ jobs:
   # Lint (Python + Terraform format)
   # --------------------------------------------------------------------------
   lint:
-    name: Lint
+    name: Lint [Codebase]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -51,7 +51,7 @@ jobs:
   # Terraform Validate + TFLint
   # --------------------------------------------------------------------------
   validate:
-    name: Validate & Lint Terraform
+    name: Validate & Lint [Terraform]
     needs: [lint]
     runs-on: ubuntu-latest
     steps:
@@ -83,7 +83,7 @@ jobs:
   # Security Scan (Trivy)
   # --------------------------------------------------------------------------
   security:
-    name: Security Scan
+    name: Security Scan [Terraform]
     needs: [lint]
     runs-on: ubuntu-latest
     steps:
