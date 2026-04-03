@@ -76,8 +76,39 @@ jobs:
         run: tflint --init
 
       - name: TFLint
+        id: tflint
         working-directory: ${{ env.TF_DIR }}
-        run: tflint --recursive
+        run: tflint --recursive --format compact 2>&1 | tee tflint_output.txt
+
+      - name: Comment TFLint on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const file = '${{ env.TF_DIR }}/tflint_output.txt';
+            if (!fs.existsSync(file)) return;
+            const output = fs.readFileSync(file, 'utf8').trim();
+            const icon = '${{ steps.tflint.outcome }}' === 'success' ? '✅' : '❌';
+            const summary = output.length === 0 ? 'No issues found.' : output;
+
+            const body = `### ${icon} TFLint
+
+            <details>
+            <summary>Show results</summary>
+
+            \`\`\`
+            ${summary}
+            \`\`\`
+
+            </details>`;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
 
   # --------------------------------------------------------------------------
   # Security Scan (Trivy)
@@ -90,6 +121,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Trivy IaC scan
+        id: trivy
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: config
@@ -97,6 +129,40 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: 1
           trivyignores: .trivyignore
+          output: trivy_output.txt
+
+      - name: Comment Trivy on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const file = 'trivy_output.txt';
+            if (!fs.existsSync(file)) return;
+            const output = fs.readFileSync(file, 'utf8').trim();
+            const icon = '${{ steps.trivy.outcome }}' === 'success' ? '✅' : '❌';
+            const summary = output.length === 0 ? 'No vulnerabilities found.' : output;
+            const truncated = summary.length > 60000
+              ? summary.substring(0, 60000) + '\n\n... truncated ...'
+              : summary;
+
+            const body = `### ${icon} Trivy Security Scan
+
+            <details>
+            <summary>Show results</summary>
+
+            \`\`\`
+            ${truncated}
+            \`\`\`
+
+            </details>`;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
 
   # --------------------------------------------------------------------------
   # Terraform Plan (on PR)
