@@ -1,7 +1,7 @@
 """Direct Strands tool for CloudWatch Logs search.
 
 This is the only direct @tool — infrastructure management and cost analysis
-are handled by MCP servers via AgentCore Gateway.
+are handled by MCP servers via AgentCore Gateway. 
 """
 
 from __future__ import annotations
