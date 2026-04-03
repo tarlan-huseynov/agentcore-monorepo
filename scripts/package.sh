@@ -15,8 +15,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_VERSION="${1:-3.12}"
-BUILD_DIR="$PROJECT_ROOT/deployment_package"
-ZIP_FILE="$PROJECT_ROOT/deployment_package.zip"
+ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
+BUILD_DIR="$ARTIFACTS_DIR/deployment_package"
+ZIP_FILE="$ARTIFACTS_DIR/deployment_package.zip"
+
+mkdir -p "$ARTIFACTS_DIR"
 
 echo "=== AgentCore Bootstrapper Packaging ==="
 echo "  Python: $PYTHON_VERSION"

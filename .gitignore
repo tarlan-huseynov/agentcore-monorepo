@@ -11,13 +11,8 @@ __pycache__/
 # Testing
 .pytest_cache/
 
-# Deployment
-deployment_package/
-deployment_package.zip
-mcp_ccapi_package/
-mcp_ccapi_package.zip
-mcp_cost_package/
-mcp_cost_package.zip
+# Build artifacts
+artifacts/
 
 # Terraform
 terraform/.terraform/

@@ -16,14 +16,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_VERSION="${1:-3.12}"
+ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
+
+mkdir -p "$ARTIFACTS_DIR"
 
 package_mcp_server() {
     local name="$1"       # e.g. "ccapi" or "cost"
     local pip_pkg="$2"    # e.g. "awslabs.ccapi-mcp-server"
     local entrypoint="$3" # e.g. "ccapi_entrypoint.py"
 
-    local build_dir="$PROJECT_ROOT/mcp_${name}_package"
-    local zip_file="$PROJECT_ROOT/mcp_${name}_package.zip"
+    local build_dir="$ARTIFACTS_DIR/mcp_${name}_package"
+    local zip_file="$ARTIFACTS_DIR/mcp_${name}_package.zip"
 
     echo "=== Packaging MCP Server: $name ==="
     echo "  Package: $pip_pkg"
