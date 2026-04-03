@@ -1,0 +1,23 @@
+# Trivy ignore file — suppress known false positives.
+# Format: <AVD-ID or rule ID> [expiry-date] [reason]
+#
+# Full list of AVD IDs: https://avd.aquasec.com/misconfig/aws/
+# Find the ID for a finding from the Trivy table output or SARIF file.
+
+# AVD-AWS-0132: "Ensure S3 bucket has versioning enabled"
+# The code deployment bucket uses source_hash-based uploads (immutable objects)
+# rather than versioning. Versioning would multiply storage costs for large ZIPs.
+AVD-AWS-0132
+
+# AVD-AWS-0089: "Ensure S3 bucket logging is enabled"
+# Deployment artifact bucket — CloudTrail covers API-level access auditing.
+AVD-AWS-0089
+
+# AVD-AWS-0172: "S3 bucket should have lifecycle policies"
+# Code bucket uses force_destroy on terraform destroy; S3 lifecycle not needed.
+AVD-AWS-0172
+
+# null_resource / local-exec: Trivy may flag shell injection risk on
+# local-exec provisioners. These are intentional CLI workarounds for
+# resources not supported by the provider (gateway targets, policy engine).
+# If Trivy adds a rule for this, add the AVD ID here.

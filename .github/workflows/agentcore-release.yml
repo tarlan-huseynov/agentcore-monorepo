@@ -11,6 +11,7 @@ permissions:
   id-token: write
   contents: read
   pull-requests: write
+  security-events: write
 
 concurrency:
   group: agentcore-terraform
@@ -19,19 +20,20 @@ concurrency:
 env:
   AWS_REGION: eu-central-1
   TF_DIR: terraform
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # --------------------------------------------------------------------------
-  # Lint & Test
+  # Lint (Python + Terraform format)
   # --------------------------------------------------------------------------
   lint:
-    name: Lint & Test
+    name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
       - name: Install dependencies
         run: uv sync
@@ -39,36 +41,90 @@ jobs:
       - name: Ruff check
         run: uv run ruff check app/ mcp_servers/
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4
+
+      - name: Terraform format check
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check -recursive
+
   # --------------------------------------------------------------------------
-  # Terraform Validate + Plan (on PR)
+  # Terraform Validate + TFLint
   # --------------------------------------------------------------------------
-  plan:
-    name: Terraform Plan
-    if: github.event_name == 'pull_request'
+  validate:
+    name: Validate & Lint Terraform
     needs: [lint]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v5
-        with:
-          role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4
 
       - name: Terraform Init
         working-directory: ${{ env.TF_DIR }}
-        run: terraform init
+        run: terraform init -backend=false
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_DIR }}
         run: terraform validate
 
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@6770de8d186019a148cc2b144e8bfa627f7d4aa8 # v5
+
+      - name: TFLint Init
+        working-directory: ${{ env.TF_DIR }}
+        run: tflint --init
+
+      - name: TFLint
+        working-directory: ${{ env.TF_DIR }}
+        run: tflint --recursive
+
+  # --------------------------------------------------------------------------
+  # Security Scan (Trivy)
+  # --------------------------------------------------------------------------
+  security:
+    name: Security Scan
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Trivy IaC scan
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb84f984fa69cba8f1 # v0.35.0
+        with:
+          scan-type: config
+          scan-ref: ${{ env.TF_DIR }}
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          trivyignores: .trivyignore
+
+  # --------------------------------------------------------------------------
+  # Terraform Plan (on PR)
+  # --------------------------------------------------------------------------
+  plan:
+    name: Terraform Plan
+    if: github.event_name == 'pull_request'
+    needs: [validate, security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
       - name: Build packages
         run: |
@@ -78,19 +134,28 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.TF_DIR }}
-        run: terraform plan -no-color -out=tfplan 2>&1 | tee plan_output.txt
+        run: |
+          set -o pipefail
+          terraform plan -no-color -out=tfplan 2>&1 | tee plan_output.txt
 
       - name: Comment plan on PR
-        uses: actions/github-script@v8
+        if: always() && steps.plan.outcome != 'skipped'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('${{ env.TF_DIR }}/plan_output.txt', 'utf8');
-            const truncated = plan.length > 60000 ? plan.substring(0, 60000) + '\n\n... truncated ...' : plan;
+            const planFile = '${{ env.TF_DIR }}/plan_output.txt';
+            if (!fs.existsSync(planFile)) return;
+            const plan = fs.readFileSync(planFile, 'utf8');
+            const truncated = plan.length > 60000
+              ? plan.substring(0, 60000) + '\n\n... truncated ...'
+              : plan;
+            const icon = '${{ steps.plan.outcome }}' === 'success' ? '✅' : '❌';
 
-            const body = `### Terraform Plan
+            const body = `### ${icon} Terraform Plan
+
             <details>
-            <summary>Show plan</summary>
+            <summary>Show plan output</summary>
 
             \`\`\`hcl
             ${truncated}
@@ -111,27 +176,27 @@ jobs:
   deploy:
     name: Terraform Apply
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint]
+    needs: [validate, security]
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v5
+        uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
         with:
           role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4
 
       - name: Terraform Init
         working-directory: ${{ env.TF_DIR }}
         run: terraform init
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
