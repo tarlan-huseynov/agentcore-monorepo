@@ -12,7 +12,7 @@ __pycache__/
 .pytest_cache/
 
 # Build artifacts
-artifacts/
+.artifacts/
 
 # Terraform
 terraform/.terraform/

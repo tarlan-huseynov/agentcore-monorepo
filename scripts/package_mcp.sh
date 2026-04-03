@@ -16,7 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_VERSION="${1:-3.12}"
-ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
+ARTIFACTS_DIR="$PROJECT_ROOT/.artifacts"
 
 mkdir -p "$ARTIFACTS_DIR"
 

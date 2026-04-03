@@ -68,7 +68,7 @@ resource "null_resource" "build_mcp" {
 resource "aws_s3_object" "deployment_package" {
   bucket      = aws_s3_bucket.code.id
   key         = "${var.project_name}/deployment_package.zip"
-  source      = "${path.module}/../artifacts/deployment_package.zip"
+  source      = "${path.module}/../.artifacts/deployment_package.zip"
   source_hash = null_resource.build.triggers.source_hash
 
   depends_on = [null_resource.build]
@@ -77,7 +77,7 @@ resource "aws_s3_object" "deployment_package" {
 resource "aws_s3_object" "ccapi_package" {
   bucket      = aws_s3_bucket.code.id
   key         = "${var.project_name}/mcp_ccapi_package.zip"
-  source      = "${path.module}/../artifacts/mcp_ccapi_package.zip"
+  source      = "${path.module}/../.artifacts/mcp_ccapi_package.zip"
   source_hash = null_resource.build_mcp.triggers.ccapi_hash
 
   depends_on = [null_resource.build_mcp]
@@ -86,7 +86,7 @@ resource "aws_s3_object" "ccapi_package" {
 resource "aws_s3_object" "cost_package" {
   bucket      = aws_s3_bucket.code.id
   key         = "${var.project_name}/mcp_cost_package.zip"
-  source      = "${path.module}/../artifacts/mcp_cost_package.zip"
+  source      = "${path.module}/../.artifacts/mcp_cost_package.zip"
   source_hash = null_resource.build_mcp.triggers.cost_hash
 
   depends_on = [null_resource.build_mcp]
