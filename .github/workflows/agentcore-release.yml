@@ -86,29 +86,31 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const marker = '<!-- agentcore-tflint -->';
             const file = '${{ env.TF_DIR }}/tflint_output.txt';
             if (!fs.existsSync(file)) return;
             const output = fs.readFileSync(file, 'utf8').trim();
             const icon = '${{ steps.tflint.outcome }}' === 'success' ? '✅' : '❌';
             const summary = output.length === 0 ? 'No issues found.' : output;
 
-            const body = `### ${icon} TFLint
+            const body = `${marker}\n### ${icon} TFLint\n\n<details>\n<summary>Show results</summary>\n\n\`\`\`\n${summary}\n\`\`\`\n\n</details>`;
 
-            <details>
-            <summary>Show results</summary>
-
-            \`\`\`
-            ${summary}
-            \`\`\`
-
-            </details>`;
-
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100
             });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body: body
+              });
+            }
 
   # --------------------------------------------------------------------------
   # Security Scan (Trivy)
@@ -137,6 +139,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const marker = '<!-- agentcore-trivy -->';
             const file = 'trivy_output.txt';
             if (!fs.existsSync(file)) return;
             const output = fs.readFileSync(file, 'utf8').trim();
@@ -146,23 +149,24 @@ jobs:
               ? summary.substring(0, 60000) + '\n\n... truncated ...'
               : summary;
 
-            const body = `### ${icon} Trivy Security Scan
+            const body = `${marker}\n### ${icon} Trivy Security Scan\n\n<details>\n<summary>Show results</summary>\n\n\`\`\`\n${truncated}\n\`\`\`\n\n</details>`;
 
-            <details>
-            <summary>Show results</summary>
-
-            \`\`\`
-            ${truncated}
-            \`\`\`
-
-            </details>`;
-
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100
             });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body: body
+              });
+            }
 
   # --------------------------------------------------------------------------
   # Terraform Plan (on PR)
@@ -209,6 +213,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const marker = '<!-- agentcore-plan -->';
             const planFile = '${{ env.TF_DIR }}/plan_output.txt';
             if (!fs.existsSync(planFile)) return;
             const plan = fs.readFileSync(planFile, 'utf8');
@@ -217,23 +222,24 @@ jobs:
               : plan;
             const icon = '${{ steps.plan.outcome }}' === 'success' ? '✅' : '❌';
 
-            const body = `### ${icon} Terraform Plan
+            const body = `${marker}\n### ${icon} Terraform Plan\n\n<details>\n<summary>Show plan output</summary>\n\n\`\`\`hcl\n${truncated}\n\`\`\`\n\n</details>`;
 
-            <details>
-            <summary>Show plan output</summary>
-
-            \`\`\`hcl
-            ${truncated}
-            \`\`\`
-
-            </details>`;
-
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100
             });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body: body
+              });
+            }
 
   # --------------------------------------------------------------------------
   # Terraform Apply (on merge to main)
