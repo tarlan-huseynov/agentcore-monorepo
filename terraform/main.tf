@@ -16,6 +16,12 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.39"
     }
+    null = {
+      source = "hashicorp/null"
+    }
+    external = {
+      source = "hashicorp/external"
+    }
   }
 }
 
