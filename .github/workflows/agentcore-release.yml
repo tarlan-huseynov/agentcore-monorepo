@@ -77,40 +77,22 @@ jobs:
 
       - name: TFLint
         id: tflint
+        continue-on-error: true
         working-directory: ${{ env.TF_DIR }}
-        run: tflint --recursive --format compact 2>&1 | tee tflint_output.txt
+        run: tflint --recursive --format compact 2>&1 | tee /tmp/tflint.txt
 
       - name: Comment TFLint on PR
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+        uses: awsbaku/github-actions/actions/upsert-pr-comment@main
         with:
-          script: |
-            const fs = require('fs');
-            const marker = '<!-- agentcore-tflint -->';
-            const file = '${{ env.TF_DIR }}/tflint_output.txt';
-            if (!fs.existsSync(file)) return;
-            const output = fs.readFileSync(file, 'utf8').trim();
-            const icon = '${{ steps.tflint.outcome }}' === 'success' ? '✅' : '❌';
-            const summary = output.length === 0 ? 'No issues found.' : output;
+          marker: agentcore-tflint
+          title: TFLint
+          status: ${{ steps.tflint.outcome }}
+          file: /tmp/tflint.txt
 
-            const body = `${marker}\n### ${icon} TFLint\n\n<details>\n<summary>Show results</summary>\n\n\`\`\`\n${summary}\n\`\`\`\n\n</details>`;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, per_page: 100
-            });
-            const existing = comments.find(c => c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body: body
-              });
-            }
+      - name: Fail if TFLint failed
+        if: steps.tflint.outcome == 'failure'
+        run: exit 1
 
   # --------------------------------------------------------------------------
   # Security Scan (Trivy)
@@ -124,6 +106,7 @@ jobs:
 
       - name: Trivy IaC scan
         id: trivy
+        continue-on-error: true
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: config
@@ -135,38 +118,17 @@ jobs:
 
       - name: Comment Trivy on PR
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+        uses: awsbaku/github-actions/actions/upsert-pr-comment@main
         with:
-          script: |
-            const fs = require('fs');
-            const marker = '<!-- agentcore-trivy -->';
-            const file = 'trivy_output.txt';
-            if (!fs.existsSync(file)) return;
-            const output = fs.readFileSync(file, 'utf8').trim();
-            const icon = '${{ steps.trivy.outcome }}' === 'success' ? '✅' : '❌';
-            const summary = output.length === 0 ? 'No vulnerabilities found.' : output;
-            const truncated = summary.length > 60000
-              ? summary.substring(0, 60000) + '\n\n... truncated ...'
-              : summary;
+          marker: agentcore-trivy
+          title: Trivy Security Scan
+          status: ${{ steps.trivy.outcome }}
+          file: trivy_output.txt
+          fallback: No vulnerabilities found.
 
-            const body = `${marker}\n### ${icon} Trivy Security Scan\n\n<details>\n<summary>Show results</summary>\n\n\`\`\`\n${truncated}\n\`\`\`\n\n</details>`;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, per_page: 100
-            });
-            const existing = comments.find(c => c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body: body
-              });
-            }
+      - name: Fail if Trivy failed
+        if: steps.trivy.outcome == 'failure'
+        run: exit 1
 
   # --------------------------------------------------------------------------
   # Terraform Plan (on PR)
@@ -202,44 +164,25 @@ jobs:
 
       - name: Terraform Plan
         id: plan
+        continue-on-error: true
         working-directory: ${{ env.TF_DIR }}
         run: |
           set -o pipefail
-          terraform plan -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          terraform plan -no-color -out=tfplan 2>&1 | tee /tmp/plan.txt
 
       - name: Comment plan on PR
-        if: always() && steps.plan.outcome != 'skipped'
-        uses: actions/github-script@v8
+        if: always()
+        uses: awsbaku/github-actions/actions/upsert-pr-comment@main
         with:
-          script: |
-            const fs = require('fs');
-            const marker = '<!-- agentcore-plan -->';
-            const planFile = '${{ env.TF_DIR }}/plan_output.txt';
-            if (!fs.existsSync(planFile)) return;
-            const plan = fs.readFileSync(planFile, 'utf8');
-            const truncated = plan.length > 60000
-              ? plan.substring(0, 60000) + '\n\n... truncated ...'
-              : plan;
-            const icon = '${{ steps.plan.outcome }}' === 'success' ? '✅' : '❌';
+          marker: agentcore-plan
+          title: Terraform Plan
+          status: ${{ steps.plan.outcome }}
+          format: hcl
+          file: /tmp/plan.txt
 
-            const body = `${marker}\n### ${icon} Terraform Plan\n\n<details>\n<summary>Show plan output</summary>\n\n\`\`\`hcl\n${truncated}\n\`\`\`\n\n</details>`;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, per_page: 100
-            });
-            const existing = comments.find(c => c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body: body
-              });
-            }
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
 
   # --------------------------------------------------------------------------
   # Terraform Apply (on merge to main)
