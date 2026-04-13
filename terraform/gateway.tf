@@ -45,9 +45,6 @@ resource "aws_bedrockagentcore_gateway" "main" {
 # ---------------------------------------------------------------------------
 
 resource "null_resource" "gateway_targets" {
-  #checkov:skip=CKV2_AWS_6:null_resource is not a Lambda — false positive from resource type pattern matching
-  #checkov:skip=CKV_AWS_290:local-exec is an intentional CLI workaround; TF provider lacks grantType support for Gateway OAuth targets
-
   triggers = {
     # Re-run when runtimes, credential provider, or MCP entry points change.
     # Entry point changes may add/remove tools, requiring a target refresh for

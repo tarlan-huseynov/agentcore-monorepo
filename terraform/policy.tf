@@ -15,8 +15,6 @@
 # ---------------------------------------------------------------------------
 
 resource "null_resource" "policy_setup" {
-  #checkov:skip=CKV2_AWS_6:null_resource is not a Lambda — false positive from resource type pattern matching
-  #checkov:skip=CKV_AWS_290:local-exec is an intentional CLI workaround; bedrock-agentcore-control policy engine has no TF resource
   triggers = {
     # Re-run when the Cedar policy file changes
     policy_hash = filesha256("${path.module}/policies/safety.cedar")
