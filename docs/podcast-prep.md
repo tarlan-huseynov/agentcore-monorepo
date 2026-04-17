@@ -380,7 +380,224 @@ The rest of the Terraform stays exactly the same."
 
 ---
 
-## Part 7 — The ARM64 Gotcha
+## Part 7 — Live Demo: The Full Lifecycle
+
+**Duration:** ~8-10 min
+**Energy:** Hands-on, showing not telling. Calm pace — let the terminal breathe.
+
+### Core Point
+
+Everything you've been talking about is real. Show the agent working, make a
+change, deploy it, and prove the change took effect. This is the section that
+converts skeptics.
+
+### Why This Demo
+
+The Cedar policy change is the strongest possible demo because:
+- It's a **1-line edit** (fast on camera, no coding)
+- The **before/after is dramatic** (agent can create → agent is blocked)
+- It shows **targeted deployment** (only the policy script re-runs, not everything)
+- It tells the **safety guardrails story** (the whole point of Cedar)
+- The **revert proves reproducibility** (put it back, apply again, works again)
+
+### Pre-Demo Setup (Do Before Recording)
+
+```bash
+# Terminal 1: Have the repo open in your editor with safety.cedar visible
+# Terminal 2: Have cli_remote.py ready
+cd /path/to/agentcore-demo
+export AWS_PROFILE=tarlan
+export AWS_REGION=eu-central-1
+
+# Verify agent is responding (dry run)
+uv run python cli_remote.py -q "What time is it?"
+```
+
+### Demo Script — 4 Acts
+
+---
+
+#### Act 1 — "The Agent Works" (~2 min)
+
+> *[Share your terminal. Invoke the deployed agent.]*
+
+"Let me show you this running. I'm going to invoke the deployed agent —
+this is hitting the actual AgentCore runtime in eu-central-1."
+
+**Query 1 (read-only, warms up the audience):**
+```
+uv run python cli_remote.py -q "List my S3 buckets in eu-central-1"
+```
+
+> *[While it runs, narrate what's happening:]*
+
+"So right now, the agent receives my query, reasons about it, decides it
+needs the `list_resources` tool, sends an MCP call through the gateway,
+the gateway routes it to the CCAPI MCP server runtime, which calls the
+Cloud Control API, and the result comes back through the same chain."
+
+> *[Results appear. Point at the tool calls in the output.]*
+
+"See those tool calls? Each one went through the gateway, got checked
+against the Cedar policy — read-only tools are always permitted — and
+reached the MCP server. That's three runtimes, a gateway, and a policy
+engine, all in one natural language query."
+
+**Delivery note:** Don't rush. Let the audience see the output. The
+tool call trace is the proof.
+
+---
+
+#### Act 2 — "The Agent Creates" (~2 min)
+
+> *[This establishes that write operations work — the contrast comes next.]*
+
+"Now let's do something more interesting. Let's create actual infrastructure."
+
+**Query 2 (write operation):**
+```
+uv run python cli_remote.py -q "Create an SQS queue called podcast-demo"
+```
+
+> *[While it runs:]*
+
+"The agent is going to look up the SQS schema, figure out the desired
+state JSON, explain what it's about to do, and then call `create_resource`
+through Cloud Control API. The Cedar policy allows SQS creation — it's
+in the allowlist."
+
+> *[Results appear. The queue is created.]*
+
+"That's a real SQS queue. It exists now. The agent figured out the schema,
+built the configuration, and created it — all from 'create an SQS queue
+called podcast-demo.'"
+
+**Delivery note:** Emphasize "real." This isn't a mock. This isn't a demo
+environment. This is your AWS account.
+
+> *[Clean up: ask the agent to delete it, or leave it — your call.]*
+
+---
+
+#### Act 3 — "The Policy Change" (~3 min)
+
+> *[This is the pivot. Switch to your editor.]*
+
+"Now here's where it gets interesting. I'm going to change one thing."
+
+> *[Open `terraform/policies/safety.cedar` in the editor. Show the
+> create/update section. Point at the SQS line.]*
+
+"This is the Cedar policy. Section 2 — the allowlist for resource creation.
+See `AWS::SQS::Queue` on line 49? I'm going to remove it."
+
+> *[Delete the line. Save the file. Keep it on screen for a beat.]*
+
+"One line. Now let's deploy."
+
+```bash
+cd terraform && terraform apply
+```
+
+> *[While Terraform runs, narrate what's happening:]*
+
+"Watch what Terraform does here. It sees that `safety.cedar` changed —
+the file hash is different. So it re-runs the policy setup script. But
+it does NOT rebuild the Python packages. It does NOT redeploy the runtimes.
+It does NOT touch the gateway or memory. Only the policy.
+
+That's the dependency graph. It knows exactly what changed and what needs
+to update."
+
+> *[Terraform finishes. Only `null_resource.policy_setup` was replaced.]*
+
+"Done. The Cedar policy is now enforced at the gateway. Let's test it."
+
+**Delivery note:** The Terraform output is your visual proof. Point at
+which resources changed (1 replaced) vs which didn't (everything else).
+If the audience sees `null_resource.policy_setup: Destroying...` and
+`null_resource.policy_setup: Creating...` while everything else is
+untouched — that's the money shot.
+
+---
+
+#### Act 4 — "The Guardrail Enforces" (~2 min)
+
+> *[Back to the CLI. Same query as Act 2.]*
+
+"Same agent. Same query. Let's see what happens."
+
+**Query 3 (same write operation, now blocked):**
+```
+uv run python cli_remote.py -q "Create an SQS queue called podcast-demo-2"
+```
+
+> *[The agent tries, but the Cedar policy blocks the `create_resource`
+> call for SQS. The agent gets an error or denial.]*
+
+"Blocked. The agent tried to call `create_resource` for SQS, the gateway
+checked the Cedar policy, SQS is no longer in the allowlist, denied.
+
+Same code. Same runtime. Same agent. One line in a policy file changed
+the boundary of what the agent can do. That's deterministic safety
+guardrails — not prompt engineering, not 'please don't do this,' but
+actual enforcement at the infrastructure level."
+
+> *[Pause. Let it land.]*
+
+**Delivery note:** This is your strongest moment. The contrast between
+Act 2 (it worked) and Act 4 (it's blocked) is visceral. Don't undercut
+it by immediately explaining — let the audience sit with it for a second.
+
+---
+
+#### Optional: Act 5 — "The Revert" (~1 min)
+
+> *[If time allows — proves reproducibility.]*
+
+"And if I put that line back..."
+
+> *[Add `AWS::SQS::Queue` back to the Cedar policy. `terraform apply`.]*
+
+"One apply. Policy restored. The agent can create SQS again. Full lifecycle:
+change, deploy, enforce, revert. All versioned, all reviewable, all in one
+command."
+
+---
+
+### Fallback Plan
+
+If the live demo fails (network, AgentCore latency, API issues):
+
+1. **Have a screen recording ready.** Record the demo beforehand as backup.
+   Don't announce it's pre-recorded unless asked.
+2. **If it's slow:** Narrate what's happening while waiting. "AgentCore is
+   routing through the gateway, checking policy, calling Cloud Control API..."
+   Latency is actually a feature — it proves real work is happening.
+3. **If it errors:** Debug live. This is authentic. "See — this is what I
+   mean about hitting edges. Let me check the logs." Use `search_logs` to
+   diagnose. The audience loves seeing real troubleshooting.
+
+### What to Show on Screen
+
+| Moment | What's visible |
+|--------|---------------|
+| Act 1-2 | Terminal with `cli_remote.py` output — tool calls + results |
+| Act 3 (edit) | Editor showing `safety.cedar` — the 1-line delete |
+| Act 3 (deploy) | Terminal with `terraform apply` — resource change summary |
+| Act 4 | Terminal with `cli_remote.py` — the denial/block message |
+
+### Key Lines to Say During Demo
+
+- "Three runtimes, a gateway, and a policy engine — one natural language query"
+- "That's a real SQS queue. It exists now."
+- "Watch what Terraform does. Only the policy updates. Everything else is untouched."
+- "Same code. Same runtime. Same agent. One line changed the boundary."
+- "Not prompt engineering. Actual enforcement at the infrastructure level."
+
+---
+
+## Part 8 — War Stories (ARM64 + Packaging)
 
 **Duration:** ~2 min (or skip if time is tight)
 **Energy:** War story — brief, specific, useful
@@ -418,7 +635,7 @@ that catches everyone.
 
 ---
 
-## Part 8 — The Deployment Sequence (For Visual Thinkers)
+## Part 9 — The Deployment Sequence (For Visual Thinkers)
 
 **Duration:** ~3 min
 **Energy:** Technical walkthrough, steady pace
@@ -466,7 +683,7 @@ people see why IaC matters for agents.
 
 ---
 
-## Part 9 — Open Questions and Forward Look
+## Part 10 — Open Questions and Forward Look
 
 **Duration:** ~8 min
 **Energy:** Thoughtful, speculative, honest about uncertainty
@@ -543,7 +760,7 @@ everyone else copies in two years."
 
 ---
 
-## Part 10 — Close
+## Part 11 — Close
 
 **Duration:** ~2 min
 **Energy:** Warm, direct, forward-looking
@@ -600,6 +817,8 @@ Keep this in front of you during the podcast — glance, don't read.
 - "Deploying agents is an infrastructure problem, not just a code problem"
 - "We're paving the road while driving on it"
 - "Boring and standard — that's the aspiration"
+- "Same code. Same runtime. Same agent. One line changed the boundary."
+- "Not prompt engineering — actual enforcement at the infrastructure level"
 
 ### The Three Provider Gaps (Numbered for Clarity)
 
