@@ -32,6 +32,11 @@ permit(
 
 // ---------------------------------------------------------------------------
 // 2. CCAPI MCP Server — create/update restricted to safe resource types
+//
+// Covers BOTH the raw tools (use `resourceType`) and the bundled workflow
+// tools prepare_/confirm_resource_creation (use `resource_type`). Bundled
+// tools exist because stateless_http=True isolates each MCP call; they run
+// the full token chain in one request. Cedar must permit the entry point.
 // ---------------------------------------------------------------------------
 
 permit(
@@ -57,6 +62,29 @@ when {
      context.input.resourceType == "AWS::EC2::Instance")
 };
 
+permit(
+    principal,
+    action in [
+        AgentCore::Action::"ccapi-mcp-server___prepare_resource_creation",
+        AgentCore::Action::"ccapi-mcp-server___confirm_resource_creation"
+    ],
+    resource
+)
+when {
+    context.input has resource_type &&
+    (context.input.resource_type == "AWS::DynamoDB::Table" ||
+     context.input.resource_type == "AWS::S3::Bucket" ||
+     context.input.resource_type == "AWS::SQS::Queue" ||
+     context.input.resource_type == "AWS::SNS::Topic" ||
+     context.input.resource_type == "AWS::Lambda::Function" ||
+     context.input.resource_type == "AWS::Events::Rule" ||
+     context.input.resource_type == "AWS::CloudWatch::Alarm" ||
+     context.input.resource_type == "AWS::ApiGateway::RestApi" ||
+     context.input.resource_type == "AWS::StepFunctions::StateMachine" ||
+     context.input.resource_type == "AWS::Logs::LogGroup" ||
+     context.input.resource_type == "AWS::EC2::Instance")
+};
+
 // ---------------------------------------------------------------------------
 // 3. CCAPI MCP Server — delete restricted to non-critical resource types
 // ---------------------------------------------------------------------------
@@ -74,6 +102,24 @@ when {
      context.input.resourceType == "AWS::CloudWatch::Alarm" ||
      context.input.resourceType == "AWS::Logs::LogGroup" ||
      context.input.resourceType == "AWS::EC2::Instance")
+};
+
+permit(
+    principal,
+    action in [
+        AgentCore::Action::"ccapi-mcp-server___prepare_resource_deletion",
+        AgentCore::Action::"ccapi-mcp-server___confirm_resource_deletion"
+    ],
+    resource
+)
+when {
+    context.input has resource_type &&
+    (context.input.resource_type == "AWS::DynamoDB::Table" ||
+     context.input.resource_type == "AWS::SQS::Queue" ||
+     context.input.resource_type == "AWS::SNS::Topic" ||
+     context.input.resource_type == "AWS::CloudWatch::Alarm" ||
+     context.input.resource_type == "AWS::Logs::LogGroup" ||
+     context.input.resource_type == "AWS::EC2::Instance")
 };
 
 // ---------------------------------------------------------------------------

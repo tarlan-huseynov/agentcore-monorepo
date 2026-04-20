@@ -83,8 +83,21 @@ for p in data.get('policies', []):
         --policy-id "$pid" >/dev/null 2>&1 || true
 done
 
-# Wait for deletions to complete
-sleep 2
+# Wait for deletions to actually propagate (delete-policy is eventually consistent)
+echo "  Waiting for deletions to propagate..."
+for i in $(seq 1 30); do
+    REMAINING=$(aws bedrock-agentcore-control list-policies \
+        --policy-engine-id "$ENGINE_ID" \
+        --query 'length(policies)' --output text 2>/dev/null || echo "-1")
+    if [ "$REMAINING" = "0" ]; then
+        echo "  All policies deleted"
+        break
+    fi
+    if [ "$i" = "30" ]; then
+        echo "  WARNING: $REMAINING policies still present after 60s — proceeding anyway"
+    fi
+    sleep 2
+done
 
 # Step 3: Split Cedar file into individual statements and create each.
 # The API requires one permit/forbid per policy, and the resource must be
@@ -113,7 +126,9 @@ if not blocks:
 names = [
     ("ccapi_ro", "CCAPI read-only tools"),
     ("ccapi_cu", "CCAPI create/update safe types"),
+    ("ccapi_cub", "CCAPI bundled create workflow (prepare/confirm)"),
     ("ccapi_del", "CCAPI delete restricted types"),
+    ("ccapi_delb", "CCAPI bundled delete workflow (prepare/confirm)"),
     ("cost_all", "Cost Explorer all tools"),
 ]
 
@@ -166,13 +181,22 @@ GW_ROLE=$(echo "$GW_DATA" | python3 -c "import sys,json; print(json.load(sys.std
 GW_PROTO=$(echo "$GW_DATA" | python3 -c "import sys,json; print(json.load(sys.stdin)['protocolType'])")
 GW_AUTH=$(echo "$GW_DATA" | python3 -c "import sys,json; print(json.load(sys.stdin)['authorizerType'])")
 
+# 2 Modes available: LOG_ONLY and ENFORCE
+# LOG_ONLY: Cedar evaluates and logs decisions but doesn't block
+# ENFORCE: Cedar evaluates and blocks if any policy is violated
+# Default is LOG_ONLY
+# We want to enforce the policies, so we set the mode to ENFORCE
+# This is the default mode, so we don't need to set it
+# We can set it to LOG_ONLY if we want to test the policies without blocking
+# We can set it to ENFORCE if we want to enforce the policies
+# We can set it to LOG_ONLY if we want to test the policies without blocking
 aws bedrock-agentcore-control update-gateway \
     --gateway-identifier "$GATEWAY_ID" \
     --name "$GW_NAME" \
     --role-arn "$GW_ROLE" \
     --protocol-type "$GW_PROTO" \
     --authorizer-type "$GW_AUTH" \
-    --policy-engine-configuration "{\"mode\": \"LOG_ONLY\", \"arn\": \"$ENGINE_ARN\"}" \
+    --policy-engine-configuration "{\"mode\": \"ENFORCE\", \"arn\": \"$ENGINE_ARN\"}" \
     --query 'policyEngineConfiguration' --output json \
     2>&1 || echo "  (gateway may already have policy engine attached)"
 
