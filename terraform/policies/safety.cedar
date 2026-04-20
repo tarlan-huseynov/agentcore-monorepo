@@ -51,7 +51,6 @@ when {
     context.input has resourceType &&
     (context.input.resourceType == "AWS::DynamoDB::Table" ||
      context.input.resourceType == "AWS::S3::Bucket" ||
-     context.input.resourceType == "AWS::SQS::Queue" ||
      context.input.resourceType == "AWS::SNS::Topic" ||
      context.input.resourceType == "AWS::Lambda::Function" ||
      context.input.resourceType == "AWS::Events::Rule" ||
@@ -74,7 +73,6 @@ when {
     context.input has resource_type &&
     (context.input.resource_type == "AWS::DynamoDB::Table" ||
      context.input.resource_type == "AWS::S3::Bucket" ||
-     context.input.resource_type == "AWS::SQS::Queue" ||
      context.input.resource_type == "AWS::SNS::Topic" ||
      context.input.resource_type == "AWS::Lambda::Function" ||
      context.input.resource_type == "AWS::Events::Rule" ||
@@ -97,7 +95,6 @@ permit(
 when {
     context.input has resourceType &&
     (context.input.resourceType == "AWS::DynamoDB::Table" ||
-     context.input.resourceType == "AWS::SQS::Queue" ||
      context.input.resourceType == "AWS::SNS::Topic" ||
      context.input.resourceType == "AWS::CloudWatch::Alarm" ||
      context.input.resourceType == "AWS::Logs::LogGroup" ||
@@ -115,7 +112,6 @@ permit(
 when {
     context.input has resource_type &&
     (context.input.resource_type == "AWS::DynamoDB::Table" ||
-     context.input.resource_type == "AWS::SQS::Queue" ||
      context.input.resource_type == "AWS::SNS::Topic" ||
      context.input.resource_type == "AWS::CloudWatch::Alarm" ||
      context.input.resource_type == "AWS::Logs::LogGroup" ||
